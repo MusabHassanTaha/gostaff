@@ -76,7 +76,7 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
     const total = drivers.length;
     const active = drivers.filter(d => {
        return state.sites.some(s => 
-           s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id
+           s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id
        );
     }).length;
     const available = total - active;
@@ -188,9 +188,9 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
     setEditCapacity(typeof d.driverCapacity === 'number' ? d.driverCapacity : '');
     
     const assigned = state.sites
-      .filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id)
+      .filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id)
       .map(s => {
-         const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+         const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
          return { siteId: s.id, count: ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount || 0 : 0) };
       });
     
@@ -610,7 +610,7 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
                     {assignedSites.length > 0 ? (
                        <div className="space-y-1.5">
                           {assignedSites.map(s => {
-                             const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+                             const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
                              const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
                              return (
                                 <div key={s.id} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-indigo-100">
@@ -774,13 +774,13 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
                         <td className="px-6 py-5 align-middle whitespace-nowrap text-gray-700 font-mono font-bold group-hover:text-gray-900 transition-colors">{d.driverCapacity ?? '-'}</td>
                         <td className="px-6 py-5 align-middle whitespace-nowrap text-gray-700 transition-colors" colSpan={2}>
                           {(() => {
-                            const assignedSites = state.sites.filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id);
+                            const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                             if (assignedSites.length === 0) return <span className="text-gray-400 font-bold">-</span>;
                             
                             return (
                               <div className="flex flex-col gap-1.5 items-start">
                                 {assignedSites.map(site => {
-                                  const ad = site.assignedDrivers?.find(x => x.driverId === d.id);
+                                  const ad = site.assignedDrivers?.find((x: any) => x.driverId === d.id);
                                   const count = ad ? ad.count : (site.driverId === d.id ? site.driverTransportCount : 0);
                                   return (
                                   <div key={site.id} className="flex items-center gap-2 text-xs">

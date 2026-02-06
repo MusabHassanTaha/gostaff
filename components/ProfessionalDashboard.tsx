@@ -411,6 +411,7 @@ export default function ProfessionalDashboard() {
           startDate: string; 
           endDate: string;
           type: string;
+          notes: string;
           duration: number; // Total duration of leave
           effectiveDuration: number; // Duration within filtered period
       }[] = [];
@@ -462,6 +463,7 @@ export default function ProfessionalDashboard() {
                           startDate: l.startDate,
                           endDate: l.endDate,
                           type: l.type,
+                          notes: l.notes || '',
                           duration: totalDuration,
                           effectiveDuration: effectiveDuration > 0 ? effectiveDuration : 0
                       });

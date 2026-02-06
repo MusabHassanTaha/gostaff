@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useAppState } from '@/components/state/AppStateContext';
 import { useAuth } from '@/components/state/AuthContext';
 import SearchableSelect from '@/components/SearchableSelect';
-import { Worker, Site } from '@/types';
+import { Worker, Site, Notification } from '@/types';
 import { Check, Pencil, Trash, X, Briefcase, Eye, Upload, Download, Users, Phone, MapPin, Calendar, CreditCard, ChevronDown, ChevronUp, AlertCircle, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { daysRemaining, statusClasses, labelFor, calculateDaysWorked, calculateDurationString } from '@/lib/date';
 

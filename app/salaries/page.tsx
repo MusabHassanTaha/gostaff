@@ -42,15 +42,21 @@ export default function SalariesPage() {
       incentives: 0
     };
 
-    const remainingAdvance = Math.max(0, data.advance - data.advanceRepayment);
-    const absenceValue = data.absenceValue;
-    const remainingViolations = Math.max(0, data.violationValue - data.violationRepayment);
+    const remainingAdvance = Math.max(0, (data.advance || 0) - (data.advanceRepayment || 0));
+    const absenceValue = data.absenceValue || 0;
+    const remainingViolations = Math.max(0, (data.violationValue || 0) - (data.violationRepayment || 0));
     
     // Net Salary = Basic + Incentives - Advance Repayment - Absence Value - Violation Repayment
-    const netSalary = Math.max(0, data.basicSalary + data.incentives - data.advanceRepayment - absenceValue - data.violationRepayment);
+    const netSalary = Math.max(0, (data.basicSalary || 0) + (data.incentives || 0) - (data.advanceRepayment || 0) - absenceValue - (data.violationRepayment || 0));
 
     return {
-      ...data,
+      basicSalary: data.basicSalary || 0,
+      advance: data.advance || 0,
+      advanceRepayment: data.advanceRepayment || 0,
+      absenceDays: data.absenceDays || 0,
+      violationValue: data.violationValue || 0,
+      violationRepayment: data.violationRepayment || 0,
+      incentives: data.incentives || 0,
       remainingAdvance,
       absenceValue,
       remainingViolations,

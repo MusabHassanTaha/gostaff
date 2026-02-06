@@ -315,10 +315,10 @@ function ReportsContent() {
     if (view === 'drivers') {
       const drivers = state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق');
       const driverRows: any[] = drivers.map(d => {
-         const assignedSites = state.sites.filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id);
+         const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
          let totalTransported = 0;
          const sitesDetails = assignedSites.map(s => {
-             const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+             const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
              const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
              totalTransported += Number(count);
              return `${s.name} (${count})`;
@@ -403,22 +403,22 @@ function ReportsContent() {
                  'الكود': worker.code || '',
                  'الموظف': worker.name,
                  'المهنة': worker.skill,
-                 'الراتب الاساسي': data.basicSalary,
-                 'السلفه': data.advance,
-                 'سداد سلفه': data.advanceRepayment,
+                 'الراتب الاساسي': data.basicSalary || 0,
+                 'السلفه': data.advance || 0,
+                 'سداد سلفه': data.advanceRepayment || 0,
                  'باقي السلفه': remainingAdvance,
-                 'أيام غياب': data.absenceDays,
+                 'أيام غياب': data.absenceDays || 0,
                  'قيمة الغياب': absenceValue,
-                 'قيمة مخالفات': data.violationValue,
-                 'سداد مخالفات': data.violationRepayment,
+                 'قيمة مخالفات': data.violationValue || 0,
+                 'سداد مخالفات': data.violationRepayment || 0,
                  'متبقي مخالفات': remainingViolations,
-                 'حوافز': data.incentives,
+                 'حوافز': data.incentives || 0,
                  'صافي الراتب': netSalary
              };
         });
         
         // Calculate Totals
-        const totals = salaryRows.reduce((acc, row) => ({
+        const totals = salaryRows.reduce((acc: any, row: any) => ({
              'الراتب الاساسي': acc['الراتب الاساسي'] + row['الراتب الاساسي'],
              'السلفه': acc['السلفه'] + row['السلفه'],
              'سداد سلفه': acc['سداد سلفه'] + row['سداد سلفه'],
@@ -950,10 +950,10 @@ function ReportsContent() {
                                 let grandTotalSites = 0;
                                 let grandTotalTransported = 0;
                                 drivers.forEach(d => {
-                                    const assignedSites = state.sites.filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id);
+                                    const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                     grandTotalSites += assignedSites.length;
                                     assignedSites.forEach(s => {
-                                        const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+                                        const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
                                         const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
                                         grandTotalTransported += Number(count);
                                     });
@@ -1355,10 +1355,10 @@ function ReportsContent() {
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
                             {state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق').map((d, idx) => {
-                                const assignedSites = state.sites.filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id);
+                                const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                 let totalTransported = 0;
                                 const sitesDetails = assignedSites.map(s => {
-                                    const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+                                    const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
                                     const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
                                     totalTransported += Number(count);
                                     return { name: s.name, count };
@@ -1396,10 +1396,10 @@ function ReportsContent() {
                                 let grandTotalSites = 0;
                                 let grandTotalTransported = 0;
                                 drivers.forEach(d => {
-                                    const assignedSites = state.sites.filter(s => s.assignedDrivers?.some(ad => ad.driverId === d.id) || s.driverId === d.id);
+                                    const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                     grandTotalSites += assignedSites.length;
                                     assignedSites.forEach(s => {
-                                        const ad = s.assignedDrivers?.find(x => x.driverId === d.id);
+                                        const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
                                         const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
                                         grandTotalTransported += Number(count);
                                     });
@@ -1585,9 +1585,9 @@ function ReportsContent() {
                                     let matchesSearch = true;
                                     if (absenceSearch) {
                                         const query = absenceSearch.toLowerCase();
-                                        matchesSearch = (w.name && w.name.toLowerCase().includes(query)) ||
+                                        matchesSearch = !!((w.name && w.name.toLowerCase().includes(query)) ||
                                                         (w.code && w.code.toLowerCase().includes(query)) ||
-                                                        (w.iqamaNumber && w.iqamaNumber.includes(query));
+                                                        (w.iqamaNumber && w.iqamaNumber.includes(query)));
                                     }
 
                                     return isAbsent && isHighlighted && matchesSearch;
