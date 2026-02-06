@@ -1,7 +1,7 @@
 services:
-  app:
+  labour-app-prod:
     # Use the image name for tagging, but build from source on the VPS
-    image: musabhassan2026/my-labour-app:latest
+    image: musabhassan2026/mygostaffapdocker:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,7 +13,7 @@ services:
       # Persist uploaded files
       - ./uploads:/app/uploads
       # Persist the database file (sync_state.json)
-      - ./data:/app/data
+      - my-data:/app/data
     environment:
       - NODE_ENV=production
       # Hostname for Next.js in Docker
@@ -21,3 +21,17 @@ services:
     # Load environment variables from .env file if present
     env_file:
       - .env.local
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gostaff.rule=Host(`gostaff.cloud`)"
+      - "traefik.http.services.gostaff.loadbalancer.server.port=3000"
+
+volumes:
+  my-data:
+    external: true
+
+networks:
+  dokploy-network:
+    external: true

@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "next lint",
-    "go-live": "docker build -t musabhassan2026/my-lab . && docker push musabhassan2026/my-lab",
-    "deploy": "docker build -t musabhassan2026/my-labour-app:latest . && docker push musabhassan2026/my-labour-app:latest"
+    "go-live": "docker build -t musabhassan2026/mygostaffapdocker:latest . && docker push musabhassan2026/mygostaffapdocker:latest",
+    "deploy": "docker build -t musabhassan2026/mygostaffapdocker:latest . && docker push musabhassan2026/mygostaffapdocker:latest"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -23,6 +23,7 @@
     "qrcode.react": "^3.1.0",
     "react": "^18",
     "react-dom": "^18",
+    "sqlite3": "^5.1.7",
     "tailwind-merge": "^2.2.0",
     "xlsx": "^0.18.5"
   },
