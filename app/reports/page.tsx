@@ -1755,6 +1755,7 @@ function ReportsContent() {
                     </div>
                 </div>
                 )}
+                {state.workers.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">
                         <p>لا يوجد عمال في النظام</p>
                     </div>

@@ -7,7 +7,7 @@ import { AuthUserRecord } from '@/types';
 
 interface AuthUser { 
   username: string; 
-  role?: 'admin' | 'engineer' | 'supervisor' | 'viewer';
+  role?: AuthUserRecord['role'];
   assignedProjectIds?: string[];
 }
 
