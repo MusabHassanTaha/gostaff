@@ -1274,7 +1274,7 @@ export default function ProfessionalDashboard() {
                                                                 oldStartDate: log.startDate, 
                                                                 startDate: log.startDate, 
                                                                 endDate: log.endDate, 
-                                                                type: log.type, 
+                                                                type: log.type as any, 
                                                                 notes: log.notes || '' 
                                                             })}
                                                             className="text-blue-500 hover:bg-blue-50 p-1 rounded"

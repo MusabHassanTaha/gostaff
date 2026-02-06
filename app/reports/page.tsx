@@ -21,7 +21,7 @@ function ReportsContent() {
     const filteredGlobalState = { ...globalState, sites: activeSites };
 
     if (isEngineer) {
-        let visibleSites = [];
+        let visibleSites: any[] = [];
 
         // 1. Explicit Assignments (Priority)
         if (user?.assignedProjectIds && user.assignedProjectIds.length > 0) {
@@ -394,10 +394,10 @@ function ReportsContent() {
                   incentives: 0
              };
              
-             const remainingAdvance = Math.max(0, data.advance - data.advanceRepayment);
-             const absenceValue = Math.round((data.basicSalary / 30) * data.absenceDays);
-             const remainingViolations = Math.max(0, data.violationValue - data.violationRepayment);
-             const netSalary = Math.max(0, data.basicSalary + data.incentives - data.advanceRepayment - absenceValue - data.violationRepayment);
+             const remainingAdvance = Math.max(0, (data.advance || 0) - (data.advanceRepayment || 0));
+             const absenceValue = Math.round(((data.basicSalary || 0) / 30) * (data.absenceDays || 0));
+             const remainingViolations = Math.max(0, (data.violationValue || 0) - (data.violationRepayment || 0));
+             const netSalary = Math.max(0, (data.basicSalary || 0) + (data.incentives || 0) - (data.advanceRepayment || 0) - absenceValue - (data.violationRepayment || 0));
              
              return {
                  'الكود': worker.code || '',

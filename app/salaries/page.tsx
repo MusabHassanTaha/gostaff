@@ -66,7 +66,7 @@ export default function SalariesPage() {
         basicSalary: acc.basicSalary + row.basicSalary,
         netSalary: acc.netSalary + row.netSalary,
         advances: acc.advances + row.advance,
-        violations: acc.violations + row.violationValue
+        violations: acc.violations + (row.violationValue || 0)
       };
     }, { basicSalary: 0, netSalary: 0, advances: 0, violations: 0 });
   }, [filteredWorkers, salaryData]);

@@ -60,7 +60,7 @@ function UserProjectsModal({ user, sites, onClose }: { user: any, sites: Site[],
                                         </div>
                                         <div className="flex items-center gap-2 text-sm text-gray-500 font-medium">
                                             <Calendar className="w-4 h-4 text-gray-400" />
-                                            <span>{site.code || '-'}</span>
+                                            <span>{site.statusNote || '-'}</span>
                                         </div>
                                     </div>
                                 </div>

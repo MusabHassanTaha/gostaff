@@ -543,7 +543,7 @@ export default function VehiclesPage() {
               <AlertTriangle className="w-4 h-4" />
               بحث المخالفات
             </button>
-            {user?.role !== 'viewer' && (
+            {(user?.role as string) !== 'viewer' && (
               <button 
                 onClick={() => { resetForm(); setIsAdding(!isAdding); }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm"
@@ -619,7 +619,7 @@ export default function VehiclesPage() {
                             <a href={form.registrationImage} download target="_blank" className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100 flex items-center gap-1" title="تحميل">
                                 <Download className="w-5 h-5" />
                             </a>
-                            {user?.role !== 'viewer' && (
+                            {(user?.role as string) !== 'viewer' && (
                                 <button type="button" onClick={() => setForm({ ...form, registrationImage: '' })} className="p-2 bg-red-50 text-red-600 rounded-lg border border-red-200 hover:bg-red-100 flex items-center gap-1" title="حذف">
                                     <Trash2 className="w-5 h-5" />
                                 </button>
@@ -770,7 +770,7 @@ export default function VehiclesPage() {
                         <Wrench className="w-4 h-4" />
                         الصيانة والمخالفات
                       </button>
-                      {user?.role !== 'viewer' && (
+                      {(user?.role as string) !== 'viewer' && (
                         <>
                           <button 
                             onClick={() => startEdit(v)}
@@ -1095,7 +1095,7 @@ export default function VehiclesPage() {
                   <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* Add Form */}
-                      {user?.role !== 'viewer' && (
+                      {(user?.role as string) !== 'viewer' && (
                         <div className="lg:col-span-1">
                           <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 sticky top-0">
                             <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2 font-cairo">
@@ -1176,7 +1176,7 @@ export default function VehiclesPage() {
                       )}
 
                       {/* List */}
-                      <div className={`space-y-4 ${user?.role !== 'viewer' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                      <div className={`space-y-4 ${(user?.role as string) !== 'viewer' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                         <div className="flex justify-between items-center">
                           <h4 className="font-bold text-gray-800 font-cairo">السجلات السابقة</h4>
                           <span className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold">
@@ -1230,7 +1230,7 @@ export default function VehiclesPage() {
                   <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* Add Violation Form */}
-                      {user?.role !== 'viewer' && (
+                      {(user?.role as string) !== 'viewer' && (
                       <div className="lg:col-span-1">
                         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 sticky top-0">
                           <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2 font-cairo">
@@ -1347,7 +1347,7 @@ export default function VehiclesPage() {
                       )}
 
                       {/* List */}
-                      <div className={`${user?.role !== 'viewer' ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4`}>
+                      <div className={`${(user?.role as string) !== 'viewer' ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4`}>
                         <div className="flex justify-between items-center">
                           <h4 className="font-bold text-gray-800 font-cairo">سجل المخالفات</h4>
                           <span className="text-sm bg-red-50 text-red-700 px-3 py-1 rounded-full font-bold">

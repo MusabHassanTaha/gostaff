@@ -286,7 +286,7 @@ export default function WorkersPage() {
       ...prev,
       workers: [newWorker, ...prev.workers],
       availableWorkerIds: [newWorker.id, ...prev.availableWorkerIds],
-      notifications: [newNotification, ...(prev.notifications || [])],
+      notifications: [newNotification, ...(prev.notifications || [])] as Notification[],
     }));
     setForm({
       name: '',
