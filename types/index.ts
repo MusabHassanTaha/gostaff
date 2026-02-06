@@ -53,15 +53,25 @@ export interface Worker {
 }
 
 export interface SalaryRecord {
-  month: string; // YYYY-MM
-  baseSalary: number;
-  deductions: number;
-  bonuses: number;
+  month?: string; // YYYY-MM
+  baseSalary?: number; // Deprecated: use basicSalary
+  basicSalary?: number; // Used in SalaryReport
+  deductions?: number;
+  bonuses?: number;
   notes?: string;
-  isPaid: boolean;
+  isPaid?: boolean;
   paymentDate?: string;
   daysWorked?: number;
   overtimeHours?: number;
+  
+  // Fields used in SalaryReport
+  advance?: number;
+  advanceRepayment?: number;
+  absenceDays?: number;
+  absenceValue?: number;
+  violationValue?: number;
+  violationRepayment?: number;
+  incentives?: number;
 }
 
 export interface Driver {
