@@ -54,6 +54,31 @@ export default function Dashboard() {
         return { sites: state.sites, workers: state.workers };
     }
 
+    // Engineer specific filtering
+    if (user?.role === 'engineer') {
+        const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/[\s\-_.]+/g, ' ') : '';
+        const uName = normalize(user?.username || '');
+        const engineerWorker = state.workers.find(w => {
+            if (!w.isEngineer) return false;
+            const wName = normalize(w.name);
+            return wName === uName || (uName.length > 3 && wName.includes(uName)) || (wName.length > 3 && uName.includes(wName));
+        });
+
+        if (engineerWorker) {
+            const mySites = state.sites.filter(s => s.engineerId === engineerWorker.id);
+            const mySiteIds = new Set(mySites.map(s => s.id));
+            
+            // Workers: assigned to my sites + unassigned (available)
+            // Engineers should see ALL available workers to pick from
+            const visibleWorkers = state.workers.filter(w => 
+                (w.assignedSiteId && mySiteIds.has(w.assignedSiteId)) ||
+                !w.assignedSiteId 
+            );
+
+            return { sites: mySites, workers: visibleWorkers };
+        }
+    }
+
     // If user has explicit project assignments, filter sites
     if (user?.assignedProjectIds && user.assignedProjectIds.length > 0) {
         const mySiteIds = new Set(user.assignedProjectIds);
@@ -68,7 +93,7 @@ export default function Dashboard() {
         return { sites: mySites, workers: myWorkers };
     }
 
-    // Default: Show all (Engineer sees full board if not restricted)
+    // Default: Show all (if no restrictions found)
     return { sites: state.sites, workers: state.workers };
   }, [state.sites, state.workers, user]);
 
@@ -190,6 +215,42 @@ export default function Dashboard() {
         workers: newState.workers // Worker objects mutated above
     });
     alert('تم التوزيع التلقائي بنجاح!');
+  };
+
+  // Return all workers from sites to rest area (except Office)
+  const handleReturnAllFromSites = () => {
+    if (user?.role === 'viewer') return;
+    if (!confirm('هل أنت متأكد من إرجاع جميع العمال من المواقع إلى الاستراحة (ماعدا عمال المكتب)؟')) return;
+
+    // Identify Office Site ID(s) - looking for "المكتب" or "Office"
+    const officeSites = state.sites.filter(s => 
+        (s.name && (s.name.includes('المكتب') || s.name.toLowerCase().includes('office')))
+    );
+    const officeSiteIds = new Set(officeSites.map(s => s.id));
+
+    // Update Workers: Unassign those assigned to non-office sites
+    const newWorkers = state.workers.map(w => {
+        if (w.assignedSiteId && !officeSiteIds.has(w.assignedSiteId)) {
+            return { ...w, assignedSiteId: undefined };
+        }
+        return w;
+    });
+
+    // Update Sites: Clear assignedWorkerIds for non-office sites
+    const newSites = state.sites.map(s => {
+        if (!officeSiteIds.has(s.id)) {
+            return { ...s, assignedWorkerIds: [] };
+        }
+        return s;
+    });
+
+    setState(prev => ({
+        ...prev,
+        workers: newWorkers,
+        sites: newSites
+    }));
+
+    alert('تم إرجاع جميع العمال من المواقع (ماعدا المكتب) بنجاح');
   };
 
   const [isConfirmNotify, setIsConfirmNotify] = useState(false);
@@ -364,20 +425,24 @@ export default function Dashboard() {
          
          // Engineer Permission Check
          if (user?.role === 'engineer') {
-              const engineerWorker = state.workers.find(w => w.name === user.username && w.isEngineer);
-              if (!engineerWorker) return;
-              
-              // Must manage the target site
-              if (targetSiteId) {
-                  const targetSite = state.sites.find(s => s.id === targetSiteId);
-                  if (targetSite?.engineerId !== engineerWorker.id) return;
+              const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/[\s\-_.]+/g, ' ') : '';
+              const uName = normalize(user?.username || '');
+              const engineerWorker = state.workers.find(w => {
+                  if (!w.isEngineer) return false;
+                  const wName = normalize(w.name);
+                  return wName === uName || (uName.length > 3 && wName.includes(uName)) || (wName.length > 3 && uName.includes(wName));
+              });
+
+              // Allow if site is in engineer's scope (via scopedState)
+              const isTargetAllowed = targetSiteId ? scopedState.sites.some(s => s.id === targetSiteId) : true;
+              const isSourceAllowed = activeWorker.assignedSiteId ? scopedState.sites.some(s => s.id === activeWorker.assignedSiteId) : true;
+
+              if (!isTargetAllowed || !isSourceAllowed) {
+                  return; // Silently block or could alert if desired, but user asked to hide alerts
               }
               
-              // If moving from another site, must manage source site too (to prevent stealing)
-              if (activeWorker.assignedSiteId && activeWorker.assignedSiteId !== targetSiteId) {
-                   const sourceSite = state.sites.find(s => s.id === activeWorker.assignedSiteId);
-                   if (sourceSite?.engineerId !== engineerWorker.id) return;
-              }
+              // If we have engineerWorker, we can double check strict ownership if needed, 
+              // but relying on scopedState is safer for the "Hide Alert" requirement.
          }
 
          // A. Same Site Reordering
@@ -463,7 +528,7 @@ export default function Dashboard() {
 
   const handleDeleteWorker = (workerId: string) => {
     if (user?.role === 'viewer') return;
-    if (!confirm('هل أنت متأكد من حذف هذا العامل؟')) return;
+    if (!confirm('هل تريد حذف هذا العامل؟')) return;
     
     setState(prev => ({
         ...prev,
@@ -495,34 +560,23 @@ export default function Dashboard() {
     
     // Engineer Validation
     if (user?.role === 'engineer') {
-       const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/\s+/g, ' ') : '';
-       const uName = normalize(user?.username || '');
-       const engineerWorker = state.workers.find(w => {
-           if (!w.isEngineer) return false;
-           const wName = normalize(w.name);
-           return wName === uName || (uName.length > 3 && wName.includes(uName)) || (wName.length > 3 && uName.includes(wName));
-       });
-       
-       if (!engineerWorker) return;
+         const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/[\s\-_.]+/g, ' ') : '';
+         const uName = normalize(user?.username || '');
+         const engineerWorker = state.workers.find(w => {
+             if (!w.isEngineer) return false;
+             const wName = normalize(w.name);
+             return wName === uName || (uName.length > 3 && wName.includes(uName)) || (wName.length > 3 && uName.includes(wName));
+         });
+         
+         // Allow if site is in engineer's scope (via scopedState)
+         const isTargetAllowed = siteId ? scopedState.sites.some(s => s.id === siteId) : true;
+         const worker = state.workers.find(w => w.id === workerId);
+         const isSourceAllowed = worker?.assignedSiteId ? scopedState.sites.some(s => s.id === worker.assignedSiteId) : true;
 
-       // 1. Check Target Site Ownership (if assigning to a site)
-       if (siteId) {
-           const targetSite = state.sites.find(s => s.id === siteId);
-           if (!targetSite || targetSite.engineerId !== engineerWorker.id) {
-               alert('غير مسموح بنقل العامل إلى مشروع ليس تحت إشرافك');
-               return;
-           }
-       }
-
-       // 2. Check Source Ownership (if moving FROM a site)
-       const worker = state.workers.find(w => w.id === workerId);
-       if (worker?.assignedSiteId) {
-           const sourceSite = state.sites.find(s => s.id === worker.assignedSiteId);
-           if (sourceSite && sourceSite.engineerId !== engineerWorker.id) {
-               alert('غير مسموح بنقل عامل من مشروع ليس تحت إشرافك');
-               return;
-           }
-       }
+         if (!isTargetAllowed || !isSourceAllowed) {
+              alert('غير مسموح بنقل عامل من/إلى مشروع ليس تحت إشرافك');
+              return;
+         }
     }
 
     const workerIndex = state.workers.findIndex(w => w.id === workerId);
@@ -573,7 +627,7 @@ export default function Dashboard() {
     if (user?.role === 'viewer') return;
     
     if (user?.role === 'engineer') {
-         const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/\s+/g, ' ') : '';
+         const normalize = (s: string) => s ? s.toLowerCase().trim().replace(/[\s\-_.]+/g, ' ') : '';
          const uName = normalize(user?.username || '');
          const engineerWorker = state.workers.find(w => {
              if (!w.isEngineer) return false;
@@ -582,10 +636,10 @@ export default function Dashboard() {
          });
 
          const worker = state.workers.find(w => w.id === workerId);
-         if (!engineerWorker || !worker || !worker.assignedSiteId) return;
+         if (!worker || !worker.assignedSiteId) return;
          
-         const site = state.sites.find(s => s.id === worker.assignedSiteId);
-         if (!site || site.engineerId !== engineerWorker.id) return;
+         const isAllowed = scopedState.sites.some(s => s.id === worker.assignedSiteId);
+         if (!isAllowed) return;
     }
 
     setState(prev => ({
@@ -928,24 +982,23 @@ export default function Dashboard() {
         {/* Main Content */}
         <div className="flex-1 flex flex-col md:flex-row">
 
-          {/* Sidebar - Available - Hidden for Engineers */}
-          {(user?.role as string) !== 'engineer' && (
+          {/* Sidebar - Available */}
           <div className="w-full md:w-80 p-3 md:p-4 border-t md:border-t-0 md:border-l bg-white z-0 shrink-0 max-h-[70vh] md:max-h-none md:sticky md:top-[160px] md:h-[calc(100vh-160px)] md:overflow-y-auto transition-all duration-300">
              <AvailableWorkers 
                 workers={activeWorkers.filter(w => !w.assignedSiteId && isWorkerMatch(w))}  
                 skills={state.skills}
-                onAddWorker={(user?.role as string) === 'viewer' ? (() => {}) : handleAddWorker}
-                onDeleteWorker={(user?.role as string) === 'viewer' ? undefined : handleDeleteWorker}
-                onUpdateWorker={(user?.role as string) === 'viewer' ? undefined : handleUpdateWorker}
-                onToggleEngineer={(user?.role as string) === 'viewer' ? undefined : handleToggleEngineer}
-                sites={state.sites}
-                onAssign={(user?.role as string) === 'viewer' ? undefined : handleAssignWorker}
+                onAddWorker={user?.role === 'viewer' ? (() => {}) : handleAddWorker}
+                onDeleteWorker={user?.role === 'viewer' || user?.role === 'engineer' ? undefined : handleDeleteWorker}
+                onUpdateWorker={user?.role === 'viewer' || user?.role === 'engineer' ? undefined : handleUpdateWorker}
+                onToggleEngineer={user?.role === 'viewer' || user?.role === 'engineer' ? undefined : handleToggleEngineer}
+                sites={scopedState.sites}
+                onAssign={user?.role === 'viewer' ? undefined : handleAssignWorker}
                 searchQuery={searchQuery}
                 onToggleAvailability={(user?.role as string) === 'viewer' || (user?.role as string) === 'engineer' ? undefined : handleToggleAvailability}
                 isMobile={isMobile}
+                onReturnAll={user?.role !== 'viewer' && user?.role !== 'engineer' ? handleReturnAllFromSites : undefined}
              />
           </div>
-          )}
           
           {/* Canvas - Sites */}
           <div className="flex-1 p-2 md:p-6 bg-slate-100 min-h-[500px]">
@@ -955,7 +1008,11 @@ export default function Dashboard() {
                  {scopedState.sites
                     .filter(site => {
                         // Status Filter
-                        const status = site.status || 'active';
+                        let status = site.status || 'active';
+                        
+                        // Normalize 'completed' to appear in 'archived' tab
+                        if (status === 'completed') status = 'archived';
+                        
                         if (projectStatusTab === 'active' && status !== 'active') return false;
                         if (projectStatusTab === 'stopped' && status !== 'stopped') return false;
                         if (projectStatusTab === 'archived' && status !== 'archived') return false;

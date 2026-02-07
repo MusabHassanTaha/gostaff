@@ -5,8 +5,9 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Site, Worker, SkillDefinition } from '@/types';
 import { WorkerCard } from './WorkerCard';
-import { MapPin, Truck, ArrowUpDown, Settings, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import { MapPin, Truck, ArrowUpDown, Settings, ChevronDown, ChevronUp, Plus, X, Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { buildWhatsappLink } from '@/lib/whatsapp';
 import SearchableSelect from '@/components/SearchableSelect';
 import Link from 'next/link';
@@ -38,6 +39,19 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showNote, setShowNote] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isAddWorkerOpen, setIsAddWorkerOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const availableWorkers = useMemo(() => {
+    if (!allWorkers) return [];
+    return allWorkers.filter(w => !w.assignedSiteId).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allWorkers]);
+
+  const filteredAvailableWorkers = useMemo(() => {
+    if (!searchTerm) return availableWorkers;
+    const lower = searchTerm.toLowerCase();
+    return availableWorkers.filter(w => w.name.toLowerCase().includes(lower) || w.skill?.toLowerCase().includes(lower));
+  }, [availableWorkers, searchTerm]);
 
   const assignedSkills = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -305,6 +319,17 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
       {(!isMobile || isExpanded) && (
         <>
       <div className="flex-1 p-2 md:p-3 min-h-[150px]">
+        {/* Add Worker Button */}
+        {onAssign && user?.role !== 'viewer' && (
+            <button
+                onClick={() => setIsAddWorkerOpen(true)}
+                className="w-full mb-3 py-2 border-2 border-dashed border-blue-200 bg-blue-50/50 text-blue-600 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+            >
+                <Plus className="w-4 h-4" />
+                <span>إضافة عمال من الاستراحة</span>
+            </button>
+        )}
+
         <SortableContext 
           id={site.id}
           items={workers.map(w => w.id)}
@@ -338,6 +363,91 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
         إجمالي: {workers.length} عمال
       </div>
         </>
+      )}
+
+      {isAddWorkerOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                {/* Modal Header */}
+                <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+                    <h3 className="font-bold text-lg text-gray-800">إضافة عمال إلى {site.name}</h3>
+                    <button onClick={() => setIsAddWorkerOpen(false)} className="p-1 hover:bg-gray-200 rounded-full text-gray-500">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                
+                {/* Search */}
+                <div className="p-4 border-b">
+                    <div className="relative">
+                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="بحث عن عامل..." 
+                            className="w-full pr-9 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                </div>
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-2 bg-gray-50/50">
+                    {filteredAvailableWorkers.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 flex flex-col items-center gap-2">
+                            <Search className="w-8 h-8 opacity-20" />
+                            <span>{availableWorkers.length === 0 ? 'لا يوجد عمال في الاستراحة' : 'لا توجد نتائج مطابقة'}</span>
+                        </div>
+                    ) : (
+                        <div className="grid gap-2">
+                            {filteredAvailableWorkers.map(worker => {
+                                const skill = skills.find(s => s.name === worker.skill);
+                                let skillColorClass = 'bg-gray-200';
+                                if (skill?.color) {
+                                     // Convert text-color to bg-color approximation if needed, or just use a default indicator
+                                     // Assuming skill.color is a tailwind text class like 'text-red-600'
+                                     const colorMatch = skill.color.match(/text-([a-z]+)-(\d+)/);
+                                     if (colorMatch) {
+                                         skillColorClass = `bg-${colorMatch[1]}-${colorMatch[2]}`;
+                                     } else if (skill.color.includes('black')) {
+                                         skillColorClass = 'bg-gray-800';
+                                     }
+                                }
+
+                                return (
+                                    <button
+                                        key={worker.id}
+                                        onClick={() => {
+                                            onAssign?.(worker.id, site.id);
+                                        }}
+                                        className="relative flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:shadow-md text-right transition-all group overflow-hidden"
+                                    >
+                                        <div className={`absolute right-0 top-0 bottom-0 w-1 ${skillColorClass}`} />
+                                        <div className="flex-1 mr-2">
+                                            <div className="font-bold text-gray-800 group-hover:text-blue-700">{worker.name}</div>
+                                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                                                <span className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600">{worker.skill}</span>
+                                                {worker.englishName && <span className="text-black font-medium">({worker.englishName})</span>}
+                                            </div>
+                                        </div>
+                                        <div className="p-2 bg-blue-50 text-blue-600 rounded-full group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                            <Plus className="w-4 h-4" />
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+                
+                {/* Footer */}
+                <div className="p-3 border-t bg-gray-50 text-center text-xs text-gray-500 flex justify-between items-center px-6">
+                    <span>عدد العمال المتاحين: {filteredAvailableWorkers.length}</span>
+                    <button onClick={() => setIsAddWorkerOpen(false)} className="text-blue-600 hover:underline">إغلاق</button>
+                </div>
+            </div>
+        </div>,
+        document.body
       )}
     </div>
   );

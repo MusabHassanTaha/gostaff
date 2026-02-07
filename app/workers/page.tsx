@@ -6,7 +6,7 @@ import { useAppState } from '@/components/state/AppStateContext';
 import { useAuth } from '@/components/state/AuthContext';
 import SearchableSelect from '@/components/SearchableSelect';
 import { Worker, Site, Notification } from '@/types';
-import { Check, Pencil, Trash, X, Briefcase, Eye, Upload, Download, Users, Phone, MapPin, Calendar, CreditCard, ChevronDown, ChevronUp, AlertCircle, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Check, Pencil, Trash, X, Briefcase, Eye, Upload, Download, Users, Phone, MapPin, Calendar, CreditCard, ChevronDown, ChevronUp, AlertCircle, ShieldCheck, AlertTriangle, Printer, Search } from 'lucide-react';
 import { daysRemaining, statusClasses, labelFor, calculateDaysWorked, calculateDurationString } from '@/lib/date';
 
 export default function WorkersPage() {
@@ -188,7 +188,10 @@ export default function WorkersPage() {
   const workerSiteMap = useMemo(() => {
     const map = new Map<string, Site>();
     state.sites.forEach(s => {
-        s.assignedWorkerIds.forEach(wid => map.set(wid, s));
+        // Handle both assignedWorkerIds (legacy/frontend) and direct worker relation (DB)
+        if (s.assignedWorkerIds && Array.isArray(s.assignedWorkerIds)) {
+            s.assignedWorkerIds.forEach(wid => map.set(wid, s));
+        }
     });
     return map;
   }, [state.sites]);
@@ -481,9 +484,19 @@ export default function WorkersPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 relative animate-fade-in">
-      <div className="w-full max-w-[1920px] mx-auto px-4 py-8 md:p-10 pb-36">
-        <div className="relative flex flex-col md:flex-row md:items-center justify-center mb-8 gap-4 min-h-[3rem]">
+    <main className="min-h-screen bg-gray-50 relative animate-fade-in print:bg-white">
+      {/* Print Header */}
+      <div className="hidden print:block mb-8 text-center border-b-2 border-gray-800 pb-4">
+          <h1 className="text-3xl font-black text-black mb-2">تقرير العمال الشامل</h1>
+          <div className="flex justify-center gap-8 text-sm font-bold text-gray-600 mt-2">
+              <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
+              <span>إجمالي العمال: {workers.length}</span>
+              <span>المستخدم: {user?.name || 'مسؤول النظام'}</span>
+          </div>
+      </div>
+
+      <div className="w-full max-w-[1920px] mx-auto px-4 py-8 md:p-10 pb-36 print:p-0 print:pb-0">
+        <div className="relative flex flex-col md:flex-row md:items-center justify-center mb-8 gap-4 min-h-[3rem] print:hidden">
           <div className="flex items-center gap-4 md:absolute md:right-0">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">إدارة العمال</h1>
             <div className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-full shadow-md transition-all hover:shadow-lg hover:scale-105 border border-blue-400/20">
@@ -598,7 +611,7 @@ export default function WorkersPage() {
 
         {/* Pending Approvals Section (Admin Only) */}
         {isAdmin && pendingWorkers.length > 0 && (
-            <div className="mb-8 bg-amber-50 rounded-xl border border-amber-200 shadow-sm overflow-hidden animate-in slide-in-from-top-4">
+            <div className="mb-8 bg-amber-50 rounded-xl border border-amber-200 shadow-sm overflow-hidden animate-in slide-in-from-top-4 print:hidden">
                 <div className="p-4 border-b border-amber-100 flex items-center justify-between bg-amber-100/50">
                     <div className="flex items-center gap-2 text-amber-800">
                         <ShieldCheck className="w-5 h-5" />
@@ -643,7 +656,7 @@ export default function WorkersPage() {
         )}
 
         {isAdding && (
-          <form onSubmit={handleAdd} className="mb-6 p-4 md:p-6 bg-white rounded-xl border border-gray-200 shadow-sm space-y-4">
+          <form onSubmit={handleAdd} className="mb-6 p-4 md:p-6 bg-white rounded-xl border border-gray-200 shadow-sm space-y-4 print:hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs font-medium text-gray-700 mb-1 block">اسم العامل (عربي)</label>
@@ -744,92 +757,111 @@ export default function WorkersPage() {
           </form>
         )}
 
-        <div className="flex flex-col xl:flex-row gap-4 mb-6">
-            <div className="flex flex-col md:flex-row gap-4 flex-1">
-                <div className="relative w-full md:w-96">
-                    <input 
-                        type="text" 
-                        placeholder="بحث باسم العامل، رقم الإقامة، الجوال..." 
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm pl-10"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                    {search && (
-                        <button 
-                            onClick={() => setSearch('')}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-1 transition-all"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-                <div className="w-full md:w-64">
-                    <SearchableSelect
-                        className="w-full"
-                        placeholder="تصفية حسب المهنة"
-                        options={filterSkillOptions}
-                        value={filterSkill}
-                        onChange={(val) => setFilterSkill(val || '')}
-                    />
-                </div>
+        {/* Stats Grid - Moved to Top */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 animate-in fade-in slide-in-from-top-4 print:hidden">
+            {/* Card 1: Total */}
+            <div className="bg-gradient-to-br from-blue-50 to-white p-5 rounded-2xl shadow-sm border border-blue-100/50 flex flex-col justify-between group hover:shadow-md transition-all relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-24 h-24 bg-blue-100/20 rounded-full -translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
+               <div className="flex items-center justify-between mb-3 relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      <Users className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-100/50 px-2.5 py-1 rounded-full border border-blue-100">الكل</span>
+               </div>
+               <div className="relative z-10">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-0.5">{statsData.total}</h3>
+                  <p className="text-sm font-medium text-gray-500">إجمالي العمال</p>
+               </div>
             </div>
 
-            {/* New Grid Stats Widget */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 w-full mb-6 animate-in fade-in slide-in-from-top-4">
-                {/* Card 1: Total */}
-                <div className="bg-white p-3 lg:p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-md transition-all">
-                   <div className="absolute right-0 top-0 w-12 lg:w-16 h-12 lg:h-16 bg-blue-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-110"></div>
-                   <div className="z-10 relative">
-                      <p className="text-gray-500 text-[10px] lg:text-xs font-bold mb-1">إجمالي العمال</p>
-                      <h3 className="text-xl lg:text-2xl font-black text-gray-800">{statsData.total}</h3>
-                   </div>
-                   <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 z-10 relative">
-                      <Users className="w-4 h-4 lg:w-5 lg:h-5" />
-                   </div>
-                </div>
+            {/* Card 2: Active */}
+            <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-2xl shadow-sm border border-green-100/50 flex flex-col justify-between group hover:shadow-md transition-all relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-24 h-24 bg-green-100/20 rounded-full -translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
+               <div className="flex items-center justify-between mb-3 relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                      <Briefcase className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold text-green-600 bg-green-100/50 px-2.5 py-1 rounded-full border border-green-100">نشط</span>
+               </div>
+               <div className="relative z-10">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-0.5">{statsData.active}</h3>
+                  <p className="text-sm font-medium text-gray-500">على رأس العمل</p>
+               </div>
+            </div>
 
-                {/* Card 2: Active */}
-                <div className="bg-white p-3 lg:p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-md transition-all">
-                   <div className="absolute right-0 top-0 w-12 lg:w-16 h-12 lg:h-16 bg-green-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-110"></div>
-                   <div className="z-10 relative">
-                      <p className="text-gray-500 text-[10px] lg:text-xs font-bold mb-1">على رأس العمل</p>
-                      <h3 className="text-xl lg:text-2xl font-black text-green-600">{statsData.active}</h3>
-                   </div>
-                   <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 z-10 relative">
-                      <Briefcase className="w-4 h-4 lg:w-5 lg:h-5" />
-                   </div>
-                </div>
+            {/* Card 3: Available */}
+            <div className="bg-gradient-to-br from-orange-50 to-white p-5 rounded-2xl shadow-sm border border-orange-100/50 flex flex-col justify-between group hover:shadow-md transition-all relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-24 h-24 bg-orange-100/20 rounded-full -translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
+               <div className="flex items-center justify-between mb-3 relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                      <Check className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold text-orange-600 bg-orange-100/50 px-2.5 py-1 rounded-full border border-orange-100">متاح</span>
+               </div>
+               <div className="relative z-10">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-0.5">{statsData.available}</h3>
+                  <p className="text-sm font-medium text-gray-500">جاهز للعمل</p>
+               </div>
+            </div>
 
-                {/* Card 3: Available */}
-                <div className="bg-white p-3 lg:p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-md transition-all">
-                   <div className="absolute right-0 top-0 w-12 lg:w-16 h-12 lg:h-16 bg-orange-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-110"></div>
-                   <div className="z-10 relative">
-                      <p className="text-gray-500 text-[10px] lg:text-xs font-bold mb-1">جاهز للعمل</p>
-                      <h3 className="text-xl lg:text-2xl font-black text-orange-500">{statsData.available}</h3>
-                   </div>
-                   <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 z-10 relative">
-                      <Check className="w-4 h-4 lg:w-5 lg:h-5" />
-                   </div>
-                </div>
+             {/* Card 4: Absent/Vacation */}
+            <div className="bg-gradient-to-br from-red-50 to-white p-5 rounded-2xl shadow-sm border border-red-100/50 flex flex-col justify-between group hover:shadow-md transition-all relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-24 h-24 bg-red-100/20 rounded-full -translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform"></div>
+               <div className="flex items-center justify-between mb-3 relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-red-600 group-hover:bg-red-600 group-hover:text-white transition-colors">
+                      <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-bold text-red-600 bg-red-100/50 px-2.5 py-1 rounded-full border border-red-100">غياب</span>
+               </div>
+               <div className="relative z-10">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-0.5">{statsData.absent}</h3>
+                  <p className="text-sm font-medium text-gray-500">إجازة / غياب</p>
+               </div>
+            </div>
+        </div>
 
-                 {/* Card 4: Absent/Vacation (or Top Skill if needed) */}
-                <div className="bg-white p-3 lg:p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden group hover:shadow-md transition-all">
-                   <div className="absolute right-0 top-0 w-12 lg:w-16 h-12 lg:h-16 bg-red-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-110"></div>
-                   <div className="z-10 relative">
-                      <p className="text-gray-500 text-[10px] lg:text-xs font-bold mb-1">إجازة / غياب</p>
-                      <h3 className="text-xl lg:text-2xl font-black text-red-600 truncate max-w-[120px]">
-                         {statsData.absent}
-                      </h3>
-                   </div>
-                   <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 z-10 relative">
-                      <AlertCircle className="w-4 h-4 lg:w-5 lg:h-5" />
-                   </div>
-                </div>
+        {/* Search and Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6 items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm print:hidden">
+            <div className="relative w-full md:flex-1">
+                <input 
+                    type="text" 
+                    placeholder="بحث سريع (الاسم، الكود، الإقامة)..." 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm pl-10 text-sm"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+                {search ? (
+                    <button 
+                        onClick={() => setSearch('')}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-full p-1 transition-all"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                ) : (
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                )}
+            </div>
+            <div className="w-full md:w-64">
+                <SearchableSelect
+                    className="w-full"
+                    placeholder="تصفية بالمهنة"
+                    options={filterSkillOptions}
+                    value={filterSkill}
+                    onChange={(val) => setFilterSkill(val || '')}
+                />
+            </div>
+            
+            <div className="flex gap-2 w-full md:w-auto">
+                 {/* Additional Action Buttons can go here if needed */}
+                 <button onClick={() => window.print()} className="flex-1 md:flex-none h-[46px] px-4 bg-gray-50 text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 hover:border-gray-300 transition-colors flex items-center justify-center gap-2" title="طباعة">
+                    <Printer className="w-4 h-4" />
+                    <span className="md:hidden">طباعة</span>
+                 </button>
             </div>
         </div>
 
         {/* Mobile List View */}
-        <div className="grid grid-cols-1 gap-3 md:hidden">
+        <div className="grid grid-cols-1 gap-3 md:hidden print:hidden">
           {workers.map((w) => {
              const skillLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
              const assignedSite = workerSiteMap.get(w.id) || state.sites.find(s => s.id === w.assignedSiteId);
@@ -935,36 +967,33 @@ export default function WorkersPage() {
         </div>
 
         {/* Full Table View for All Screens */}
-        <div className="hidden md:block bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden ring-1 ring-black/5">
-          <div className="overflow-auto custom-scrollbar max-h-[75vh]">
-            <table className="w-full text-right border-collapse min-w-[1600px]">
-              <thead className="bg-gradient-to-l from-slate-800 to-slate-900 text-white shadow-md sticky top-0 z-20">
+        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:shadow-none print:border-0">
+          <div className="overflow-auto custom-scrollbar max-h-[75vh] print:max-h-none print:overflow-visible">
+            <table className="w-full text-right border-collapse min-w-full">
+              <thead className="bg-gray-50/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-200 shadow-sm print:static print:bg-gray-100 print:shadow-none">
                 <tr>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap w-12 font-cairo border-b border-slate-700">#</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الكود</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الاسم</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الحالة</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">المهنة</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الجنسية</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الديانة</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">رقم الإقامة</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الجوال</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">تاريخ التعيين</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap text-center font-cairo border-b border-slate-700">انتهاء الإقامة</th>
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap text-center font-cairo border-b border-slate-700">انتهاء التأمين</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12 text-center print:text-black print:border-b-2 print:border-gray-300">#</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-24 print:text-black print:border-b-2 print:border-gray-300">الكود</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px] print:text-black print:border-b-2 print:border-gray-300">الاسم</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28 text-center print:hidden">الحالة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">المهنة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">الجنسية</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">رقم الإقامة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">الجوال</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border-b-2 print:border-gray-300">الإقامة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border-b-2 print:border-gray-300">التأمين</th>
                   {canViewSalary && (
                     <>
-                        <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">البنك</th>
-                        <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">رقم الحساب</th>
+                        <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">البنك</th>
                     </>
                   )}
-                  <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap font-cairo border-b border-slate-700">الموقع الحالي</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px] print:text-black print:border-b-2 print:border-gray-300">الموقع الحالي</th>
                   {(canEdit || canDelete) && (
-                      <th className="px-5 py-5 text-sm font-bold text-white whitespace-nowrap text-center sticky left-0 bg-slate-900 shadow-sm z-30 font-cairo border-b border-slate-700">إجراءات</th>
+                      <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center sticky left-0 bg-gray-50 shadow-sm z-30 w-24 print:hidden">إجراءات</th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 bg-white">
                 {workers.map((w, idx) => {
                   const skillLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
                   const assignedSite = workerSiteMap.get(w.id) || state.sites.find(s => s.id === w.assignedSiteId);
@@ -972,97 +1001,100 @@ export default function WorkersPage() {
                   const daysIns = daysRemaining(w.insuranceExpiry);
 
                   return (
-                    <tr key={w.id} className="hover:bg-blue-50 transition-colors group duration-150 ease-in-out odd:bg-white even:bg-slate-50 border-b border-gray-100 last:border-0">
-                      <td className="px-5 py-5 text-sm text-gray-600 font-bold font-cairo">{idx + 1}</td>
-                      <td className="px-5 py-5 text-sm text-gray-700 font-bold font-cairo">{w.code || '-'}</td>
-                      <td className="px-5 py-5">
-                        <div className="font-bold text-gray-900 font-cairo text-base">{w.name}</div>
-                        {w.englishName && <div className="text-sm text-black font-bold font-cairo mt-1">{w.englishName}</div>}
+                    <tr key={w.id} className="hover:bg-blue-50/40 transition-colors group">
+                      <td className="px-4 py-3 text-sm text-gray-500 font-medium text-center">{idx + 1}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-semibold font-mono">{w.code || '-'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col max-w-[200px]">
+                            <span className="text-sm font-bold text-gray-900 truncate print:whitespace-normal print:overflow-visible" title={w.name}>{w.name}</span>
+                            {w.englishName && <span className="text-[10px] text-gray-500 mt-0.5 truncate uppercase font-medium print:whitespace-normal print:overflow-visible" title={w.englishName}>{w.englishName}</span>}
+                        </div>
                       </td>
-                      <td className="px-5 py-5">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold font-cairo ${
-                            w.status === 'active' || !w.status ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      <td className="px-4 py-3 text-center print:hidden">
+                        <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-bold w-20 ${
+                            w.status === 'active' || !w.status 
+                            ? 'bg-green-100 text-green-700 border border-green-200' 
+                            : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
                         }`}>
                             {w.status === 'active' || !w.status ? 'نشط' : 'قيد المراجعة'}
                         </span>
                       </td>
-                      <td className="px-5 py-5">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200 font-cairo">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 whitespace-nowrap">
                             {skillLabel}
                         </span>
                       </td>
-                      <td className="px-5 py-5 text-sm text-gray-700 font-medium font-cairo">{w.nationality || '-'}</td>
-                      <td className="px-5 py-5 text-sm text-gray-700 font-medium font-cairo">{w.religion || '-'}</td>
-                      <td className="px-5 py-5 text-sm text-gray-700 font-bold font-cairo">{w.iqamaNumber || '-'}</td>
-                      <td className="px-5 py-5 text-sm text-gray-700 font-bold font-cairo" dir="ltr">{w.phone || '-'}</td>
-                      <td className="px-5 py-5 text-sm text-gray-700 whitespace-nowrap font-cairo">
-                        {w.hireDate ? (
-                            <div>
-                                <div className="font-medium">{w.hireDate}</div>
-                                <div className="text-xs text-blue-600 font-bold mt-0.5">
-                                    منذ {calculateDaysWorked(w.hireDate)} يوم
-                                </div>
-                                <div className="text-[10px] text-gray-500 font-bold mt-0.5 whitespace-nowrap">
-                                    {calculateDurationString(w.hireDate)}
-                                </div>
-                            </div>
-                        ) : '-'}
-                      </td>
-                      <td className="px-5 py-5 text-center">
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{w.nationality || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap">{w.iqamaNumber || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap" dir="ltr">{w.phone || '-'}</td>
+                      
+                      <td className="px-4 py-3 text-center">
                         {w.iqamaExpiry ? (
-                            <div>
-                                <div className="font-medium text-sm text-gray-700">{w.iqamaExpiry}</div>
-                                <span className={`inline-flex px-3 py-0.5 mt-1 rounded-full text-[10px] font-bold w-20 justify-center font-cairo ${statusClasses(daysIqama)}`}>
+                            <div className="flex flex-col items-center">
+                                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${statusClasses(daysIqama)}`}>
                                     {daysIqama !== undefined ? `${daysIqama} يوم` : '-'}
                                 </span>
+                                <span className="text-[10px] text-gray-400 mt-0.5 font-mono">{w.iqamaExpiry}</span>
                             </div>
                         ) : '-'}
                       </td>
-                      <td className="px-5 py-5 text-center">
+                      <td className="px-4 py-3 text-center">
                         {w.insuranceExpiry ? (
-                            <div>
-                                <div className="font-medium text-sm text-gray-700">{w.insuranceExpiry}</div>
-                                <span className={`inline-flex px-3 py-0.5 mt-1 rounded-full text-[10px] font-bold w-20 justify-center font-cairo ${statusClasses(daysIns)}`}>
+                            <div className="flex flex-col items-center">
+                                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${statusClasses(daysIns)}`}>
                                     {daysIns !== undefined ? `${daysIns} يوم` : '-'}
                                 </span>
+                                <span className="text-[10px] text-gray-400 mt-0.5 font-mono">{w.insuranceExpiry}</span>
                             </div>
                         ) : '-'}
                       </td>
                       {canViewSalary && (
                         <>
-                            <td className="px-5 py-5 text-sm text-gray-700 text-center font-medium font-cairo">{w.bankName || '-'}</td>
-                            <td className="px-5 py-5 text-sm text-gray-900 font-bold whitespace-nowrap font-cairo" dir="ltr">{w.bankAccount || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                                <div className="flex flex-col max-w-[120px]">
+                                    <span className="truncate text-xs font-medium print:whitespace-normal print:overflow-visible" title={w.bankName}>{w.bankName || '-'}</span>
+                                    <span className="text-[10px] text-gray-400 font-mono truncate print:whitespace-normal print:overflow-visible" dir="ltr" title={w.bankAccount}>{w.bankAccount || '-'}</span>
+                                </div>
+                            </td>
                         </>
                       )}
-                      <td className="px-5 py-5">
+                      <td className="px-4 py-3">
                          {assignedSite ? (
-                             <Link href={`/?search=${encodeURIComponent(assignedSite.name)}`} className="text-primary hover:text-primary/80 hover:underline text-sm font-bold font-cairo transition-colors">
-                                 {assignedSite.name}
+                             <Link href={`/?search=${encodeURIComponent(assignedSite.name)}`} className="group/site flex items-center gap-1.5 max-w-[160px]">
+                                 <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/site:bg-blue-600 group-hover/site:text-white transition-colors shrink-0">
+                                    <MapPin className="w-3 h-3" />
+                                 </div>
+                                 <span className="text-sm font-medium text-gray-700 truncate group-hover/site:text-blue-700 transition-colors print:whitespace-normal print:overflow-visible" title={assignedSite.name}>
+                                    {assignedSite.name}
+                                 </span>
                              </Link>
                          ) : (
-                             <span className="text-gray-400 text-sm font-medium font-cairo">غير معين</span>
+                             <span className="text-gray-400 text-xs flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                                غير معين
+                             </span>
                          )}
                       </td>
                       {(canEdit || canDelete) && (
-                        <td className="px-5 py-5 sticky left-0 group-odd:bg-white group-even:bg-slate-50 group-hover:bg-blue-50 transition-colors shadow-sm z-10 border-r border-gray-100">
-                            <div className="flex items-center justify-center gap-2">
+                        <td className="px-4 py-3 sticky left-0 bg-white group-hover:bg-blue-50/40 transition-colors z-10 border-r border-gray-100 shadow-sm text-center print:hidden">
+                            <div className="flex items-center justify-center gap-1">
                                 {w.iqamaImage && (
                                     <>
-                                        <button onClick={() => setViewImage(w.iqamaImage!)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="عرض الإقامة">
+                                        <button onClick={() => setViewImage(w.iqamaImage!)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="عرض الإقامة">
                                             <Eye className="w-4 h-4" />
                                         </button>
-                                        <a href={w.iqamaImage} download target="_blank" className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors" title="تحميل الإقامة">
+                                        <a href={w.iqamaImage} download target="_blank" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all" title="تحميل الإقامة">
                                             <Download className="w-4 h-4" />
                                         </a>
                                     </>
                                 )}
                                 {canEdit && (
-                                    <button onClick={() => startEdit(w)} className="p-2 text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors" title="تعديل">
+                                    <button onClick={() => startEdit(w)} className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-all" title="تعديل">
                                         <Pencil className="w-4 h-4" />
                                     </button>
                                 )}
                                 {canDelete && (
-                                    <button onClick={() => remove(w.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors" title="حذف">
+                                    <button onClick={() => remove(w.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="حذف">
                                         <Trash className="w-4 h-4" />
                                     </button>
                                 )}
@@ -1074,8 +1106,14 @@ export default function WorkersPage() {
                 })}
                 {workers.length === 0 && (
                     <tr>
-                        <td colSpan={15} className="px-6 py-12 text-center text-gray-400">
-                            لا يوجد عمال مطابقين للبحث
+                        <td colSpan={15} className="px-6 py-12 text-center">
+                            <div className="flex flex-col items-center justify-center text-gray-400">
+                                <Users className="w-12 h-12 mb-4 text-gray-300" />
+                                <p className="text-lg font-medium text-gray-500">لا يوجد عمال مطابقين للبحث</p>
+                                <button onClick={() => {setSearch(''); setFilterSkill('');}} className="mt-2 text-sm text-blue-600 hover:underline">
+                                    مسح عوامل التصفية
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 )}

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Worker, SkillDefinition, Site } from '@/types';
 import { WorkerCard } from './WorkerCard';
-import { Search, Filter, ChevronDown, ChevronUp, Briefcase } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, Briefcase, LogOut } from 'lucide-react';
 
 interface AvailableWorkersProps {
   workers: Worker[];
@@ -19,9 +19,10 @@ interface AvailableWorkersProps {
   onManageSkills?: () => void;
   onToggleAvailability?: (workerId: string, status: 'available' | 'absent') => void;
   isMobile?: boolean;
+  onReturnAll?: () => void;
 }
 
-export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWorker, onToggleEngineer, sites, onAssign, searchQuery, onManageSkills, onToggleAvailability, isMobile }: AvailableWorkersProps) {
+export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWorker, onToggleEngineer, sites, onAssign, searchQuery, onManageSkills, onToggleAvailability, isMobile, onReturnAll }: AvailableWorkersProps) {
   const { setNodeRef } = useDroppable({
     id: 'available',
     data: { type: 'available' },
@@ -50,9 +51,20 @@ export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWork
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
             قائمة الانتظار والجاهزية
         </h2>
-        <span className="bg-white px-2 py-0.5 rounded text-xs border border-gray-200 text-gray-600 font-mono">
-            {workers.length}
-        </span>
+        <div className="flex items-center gap-2">
+            {onReturnAll && (
+                <button 
+                    onClick={onReturnAll}
+                    className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 border border-red-200 transition-colors shadow-sm"
+                    title="إرجاع الكل للاستراحة"
+                >
+                    <LogOut className="w-4 h-4 rotate-180" />
+                </button>
+            )}
+            <span className="bg-white px-2 py-0.5 rounded text-xs border border-gray-200 text-gray-600 font-mono">
+                {workers.length}
+            </span>
+        </div>
       </div>
 
       <div className="flex flex-col border-b bg-white">
@@ -122,7 +134,7 @@ export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWork
               onAssign={onAssign}
               hideSkillLabel={!isMobile}
               onToggleAvailability={onToggleAvailability ? (status) => onToggleAvailability(worker.id, status) : undefined}
-              isCompact={!isMobile}
+              isCompact={false}
               isMobile={isMobile}
             />
           ))

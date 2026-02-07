@@ -151,7 +151,6 @@ export function WorkerCardView({
     >
       {/* Drag Handle & Menu */}
       <div>
-        {user?.role !== 'engineer' && (
         <div 
           ref={buttonRef} 
           onClick={(e) => {
@@ -197,9 +196,8 @@ export function WorkerCardView({
           )}
           {(sites && onAssign) && <ChevronDown className={`w-3 h-3 ${isMobile ? 'text-blue-400' : 'text-gray-400'}`} />}
         </div>
-        )}
         
-        {showMoveMenu && sites && onAssign && user?.role !== 'engineer' && createPortal(
+        {showMoveMenu && sites && onAssign && createPortal(
           <>
             {isMobile && (
                 <div className="fixed inset-0 bg-black/50 z-[9998] backdrop-blur-sm" onClick={() => setShowMoveMenu(false)} />
