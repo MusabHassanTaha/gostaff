@@ -34,6 +34,7 @@ next-env.d.ts
 # Database / Local State
 /var/
 /data/*.json
+!/data/db.json
 !/data/.gitkeep
 *.db
 *.sqlite
