@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Worker {
+  id                String   @id @default(uuid())
+  code              String?
+  name              String
+  englishName       String?
+  skill             String?
+  iqamaNumber       String?
+  iqamaImage        String?
+  nationality       String?
+  religion          String?
+  phone             String?
+  hireDate          String?
+  iqamaExpiry       String?
+  insuranceExpiry   String?
+  bankName          String?
+  bankAccount       String?
+  
+  // Status fields
+  status            String   @default("active")
+  availabilityStatus String  @default("available")
+  
+  // Timestamps for status changes
+  absentSince       String?  // ISO Date string
+  waitingSince      String?  // ISO Date string
+  
+  // Driver specific
+  driverCarPlate    String?
+  driverCarType     String?
+  
+  // Relationships
+  assignedSiteId    String?
+  site              Site?    @relation(fields: [assignedSiteId], references: [id])
+  
+  // JSON data for history (keeping it simple for now)
+  absenceHistory    String?  // Stored as JSON string to avoid migration complexity for now
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Site {
+  id          String   @id @default(uuid())
+  name        String
+  code        String?
+  location    String?
+  manager     String?
+  status      String   @default("active") // active, stopped, completed
+  
+  workers     Worker[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Vehicle {
+  id          String   @id @default(uuid())
+  name        String
+  plate       String?
+  type        String?
+  status      String   @default("active")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  username           String   @id
+  password           String
+  role               String   @default("viewer") // admin, viewer
+  assignedProjectIds String?  // Stored as JSON string or comma-separated
+  status             String   @default("active") // active, pending
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
