@@ -72,22 +72,7 @@ export default function VehiclesPage() {
       { value: 'other', label: 'أخرى' }
   ];
 
-  // Driver Autocomplete State
-  const [driverSearchTerm, setDriverSearchTerm] = useState('');
-  const [showDriverDropdown, setShowDriverDropdown] = useState(false);
 
-  const filteredDrivers = useMemo(() => {
-    if (!driverSearchTerm) return state.workers || [];
-    return (state.workers || []).filter(w => 
-      w.name.toLowerCase().includes(driverSearchTerm.toLowerCase())
-    );
-  }, [state.workers, driverSearchTerm]);
-
-  const handleSelectDriver = (driverId: string, driverName: string) => {
-    setViolationSearchDriver(driverId);
-    setDriverSearchTerm(driverName);
-    setShowDriverDropdown(false);
-  };
 
   const violationSearchResults = useMemo(() => {
     const query = violationSearchQuery.toLowerCase();
@@ -833,58 +818,12 @@ export default function VehiclesPage() {
                       <User className="w-3.5 h-3.5" />
                       فلتر حسب السائق
                     </label>
-                    <div className="relative">
-                      <input 
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
-                        placeholder="ابحث باسم السائق..."
-                        value={driverSearchTerm}
-                        onChange={e => {
-                          setDriverSearchTerm(e.target.value);
-                          setShowDriverDropdown(true);
-                          if (!e.target.value) setViolationSearchDriver('');
-                        }}
-                        onFocus={() => setShowDriverDropdown(true)}
-                      />
-                      {driverSearchTerm && (
-                        <button 
-                          onClick={() => {
-                            setDriverSearchTerm('');
-                            setViolationSearchDriver('');
-                          }}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                      
-                      {showDriverDropdown && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setShowDriverDropdown(false)}></div>
-                          <div className="absolute z-50 w-full min-w-[300px] mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[500px] overflow-y-auto">
-                  <button
-                    className="w-full text-right px-3 py-2 text-sm hover:bg-gray-50 text-gray-600 border-b border-gray-100 font-bold"
-                              onClick={() => handleSelectDriver('', '')}
-                            >
-                              عرض الكل
-                            </button>
-                            {filteredDrivers.length === 0 ? (
-                              <div className="px-3 py-2 text-sm text-gray-400 text-center font-bold">لا يوجد سائق بهذا الاسم</div>
-                            ) : (
-                              filteredDrivers.map(w => (
-                                <button
-                                  key={w.id}
-                                  className={`w-full text-right px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between ${violationSearchDriver === w.id ? 'bg-red-50 text-red-700 font-bold' : 'text-gray-700 font-bold'}`}
-                                  onClick={() => handleSelectDriver(w.id, w.name)}
-                                >
-                                  <span>{w.name}</span>
-                                  {violationSearchDriver === w.id && <div className="w-2 h-2 rounded-full bg-red-500"></div>}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    <SearchableSelect
+                      placeholder="ابحث باسم السائق..."
+                      options={workerOptions}
+                      value={violationSearchDriver || undefined}
+                      onChange={(val) => setViolationSearchDriver(val || '')}
+                    />
                   </div>
 
                   {/* Vehicle Filter */}
