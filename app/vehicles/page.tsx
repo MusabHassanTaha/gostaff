@@ -51,6 +51,8 @@ export default function VehiclesPage() {
   const [violationSearchQuery, setViolationSearchQuery] = useState('');
   const [violationSearchDriver, setViolationSearchDriver] = useState('');
   const [violationSearchVehicle, setViolationSearchVehicle] = useState('');
+  const [violationSearchStartDate, setViolationSearchStartDate] = useState('');
+  const [violationSearchEndDate, setViolationSearchEndDate] = useState('');
 
   const vehicleOptions = useMemo(() => {
     return (state.vehicles || []).map(v => ({
@@ -86,6 +88,10 @@ export default function VehiclesPage() {
         // Driver Filter
         if (violationSearchDriver && violation.driverId !== violationSearchDriver) return;
 
+        // Date Range Filter
+        if (violationSearchStartDate && violation.date < violationSearchStartDate) return;
+        if (violationSearchEndDate && violation.date > violationSearchEndDate) return;
+
         // Text Search Filter
         if (query) {
            const matchDriver = violation.driverName?.toLowerCase().includes(query);
@@ -101,7 +107,7 @@ export default function VehiclesPage() {
     });
 
     return results;
-  }, [state.vehicles, violationSearchQuery, violationSearchDriver, violationSearchVehicle]);
+  }, [state.vehicles, violationSearchQuery, violationSearchDriver, violationSearchVehicle, violationSearchStartDate, violationSearchEndDate]);
   
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -811,33 +817,63 @@ export default function VehiclesPage() {
               </div>
               
               <div className="p-4 border-b bg-white print:hidden space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Driver Filter */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
-                      <User className="w-3.5 h-3.5" />
-                      فلتر حسب السائق
-                    </label>
-                    <SearchableSelect
-                      placeholder="ابحث باسم السائق..."
-                      options={workerOptions}
-                      value={violationSearchDriver || undefined}
-                      onChange={(val) => setViolationSearchDriver(val || '')}
-                    />
-                  </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Driver Filter */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5" />
+                        فلتر حسب السائق
+                      </label>
+                      <SearchableSelect
+                        placeholder="ابحث باسم السائق..."
+                        options={workerOptions}
+                        value={violationSearchDriver || undefined}
+                        onChange={(val) => setViolationSearchDriver(val || '')}
+                      />
+                    </div>
 
-                  {/* Vehicle Filter */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
-                      <Filter className="w-3.5 h-3.5" />
-                      فلتر حسب المركبة
-                    </label>
-                    <SearchableSelect
-                      placeholder="جميع المركبات"
-                      options={vehicleOptions}
-                      value={violationSearchVehicle || undefined}
-                      onChange={(val) => setViolationSearchVehicle(val || '')}
-                    />
+                    {/* Vehicle Filter */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" />
+                        فلتر حسب المركبة
+                      </label>
+                      <SearchableSelect
+                        placeholder="جميع المركبات"
+                        options={vehicleOptions}
+                        value={violationSearchVehicle || undefined}
+                        onChange={(val) => setViolationSearchVehicle(val || '')}
+                      />
+                    </div>
+
+                    {/* Date Range Start */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            من تاريخ
+                        </label>
+                        <input 
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
+                            value={violationSearchStartDate}
+                            onChange={e => setViolationSearchStartDate(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Date Range End */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            إلى تاريخ
+                        </label>
+                        <input 
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
+                            value={violationSearchEndDate}
+                            onChange={e => setViolationSearchEndDate(e.target.value)}
+                        />
+                    </div>
                   </div>
 
                   {/* Text Search */}
@@ -862,8 +898,10 @@ export default function VehiclesPage() {
                 {/* Print Header */}
                 <div className="hidden print:block mb-6 border-b pb-4">
                    <h1 className="text-2xl font-bold text-center mb-2 font-cairo">تقرير المخالفات المرورية</h1>
-                   <div className="flex justify-center gap-4 text-sm text-gray-600 font-bold">
+                   <div className="flex justify-center gap-4 text-sm text-gray-600 font-bold flex-wrap">
                      <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</span>
+                     {violationSearchStartDate && <span>من: {violationSearchStartDate}</span>}
+                     {violationSearchEndDate && <span>إلى: {violationSearchEndDate}</span>}
                      {violationSearchDriver && <span>السائق: {state.workers.find(w => w.id === violationSearchDriver)?.name}</span>}
                      {violationSearchVehicle && <span>المركبة: {state.vehicles?.find(v => v.id === violationSearchVehicle)?.plateNumber}</span>}
                    </div>
@@ -890,7 +928,7 @@ export default function VehiclesPage() {
                      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm print:border-2 print:shadow-none print:rounded-none">
                         
                         {/* Mobile Card View */}
-                        <div className="md:hidden grid grid-cols-1 divide-y divide-gray-100">
+                        <div className="md:hidden print:hidden grid grid-cols-1 divide-y divide-gray-100">
                            {violationSearchResults.map((item, idx) => (
                               <div key={`${item.violation.id}-${idx}-mobile`} className="p-4 flex flex-col gap-3">
                                  <div className="flex justify-between items-start">
@@ -932,7 +970,7 @@ export default function VehiclesPage() {
                         </div>
 
                         {/* Desktop Table View */}
-                        <table className="hidden md:table w-full text-right">
+                        <table className="hidden md:table print:table w-full text-right">
                           <thead className="bg-gray-50 text-gray-700 font-bold border-b print:bg-gray-100">
                             <tr>
                               <th className="px-4 py-3 whitespace-nowrap">اسم السائق</th>
