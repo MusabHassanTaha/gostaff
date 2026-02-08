@@ -349,7 +349,7 @@ export function WorkerCardView({
                         )}
                         {worker.englishName && (
                             <p 
-                                className={`text-xs text-black font-medium leading-tight mt-0.5 ${isMobile ? 'text-left dir-ltr' : ''}`}
+                                className={`text-xs text-black font-medium leading-tight mt-0.5 ${isMobile ? 'text-right' : ''}`}
                                 title={worker.englishName}
                             >
                                 {worker.englishName}
@@ -359,7 +359,7 @@ export function WorkerCardView({
                 )}
                 
                 {/* Action Buttons */}
-                <div className={`flex flex-shrink-0 ${isMobile ? 'gap-2 justify-between flex-wrap border-t border-gray-100 pt-2 mt-2 w-full' : isCompact ? 'gap-1 justify-end border-t border-gray-50 pt-1 mt-1' : 'gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
+                <div className={`flex flex-shrink-0 ${isMobile ? 'gap-3 justify-start flex-wrap border-t border-gray-100 pt-2 mt-2 w-full' : isCompact ? 'gap-1 justify-end border-t border-gray-50 pt-1 mt-1' : 'gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
                     {onToggleAvailability && user?.role !== 'viewer' && user?.role !== 'engineer' && (
                         <button 
                             onClick={() => onToggleAvailability(worker.availabilityStatus === 'absent' ? 'available' : 'absent')}
