@@ -27,6 +27,6 @@ jobs:
         with:
           context: .
           push: true
-          tags: musabhassan2026/musabdokerhub:latest
-          cache-from: type=registry,ref=musabhassan2026/musabdokerhub:buildcache
-          cache-to: type=registry,ref=musabhassan2026/musabdokerhub:buildcache,mode=max
+          tags: musabhassan2026/musabelmalik:latest
+          cache-from: type=registry,ref=musabhassan2026/musabelmalik:buildcache
+          cache-to: type=registry,ref=musabhassan2026/musabelmalik:buildcache,mode=max
