@@ -491,7 +491,7 @@ export default function WorkersPage() {
           <div className="flex justify-center gap-8 text-sm font-bold text-gray-600 mt-2">
               <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
               <span>إجمالي العمال: {workers.length}</span>
-              <span>المستخدم: {user?.name || 'مسؤول النظام'}</span>
+              <span>المستخدم: {user?.username || 'مسؤول النظام'}</span>
           </div>
       </div>
 

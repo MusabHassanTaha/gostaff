@@ -291,16 +291,19 @@ function ProjectsContent() {
                             <button 
                                 onClick={() => s.status === 'stopped' && setExpandedNoteId(expandedNoteId === s.id ? null : s.id)}
                                 className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all border flex items-center gap-1.5 ${
+                                s.status === 'archived' ? 'bg-gray-50 text-gray-700 border-gray-200' :
                                 s.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-100' :
                                 s.status === 'stopped' ? 'bg-red-50 text-red-700 border-red-100 cursor-pointer hover:bg-red-100' :
                                 'bg-green-50 text-green-700 border-green-100'
                             }`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${
+                                    s.status === 'archived' ? 'bg-gray-500' :
                                     s.status === 'completed' ? 'bg-blue-500' :
                                     s.status === 'stopped' ? 'bg-red-500' :
                                     'bg-green-500'
                                 }`}></span>
-                                {s.status === 'completed' ? 'منتهي' :
+                                {s.status === 'archived' ? 'مؤرشف' :
+                                 s.status === 'completed' ? 'منتهي' :
                                  s.status === 'stopped' ? 'متوقف' :
                                  'جاري العمل'}
                             </button>
@@ -363,16 +366,19 @@ function ProjectsContent() {
                   <button 
                     onClick={() => s.status === 'stopped' && setExpandedNoteId(expandedNoteId === s.id ? null : s.id)}
                     className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all border flex items-center gap-1.5 ${
+                    s.status === 'archived' ? 'bg-gray-50 text-gray-700 border-gray-200' :
                     s.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-100' :
                     s.status === 'stopped' ? 'bg-red-50 text-red-700 border-red-100 cursor-pointer hover:bg-red-100' :
                     'bg-green-50 text-green-700 border-green-100'
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${
+                        s.status === 'archived' ? 'bg-gray-500' :
                         s.status === 'completed' ? 'bg-blue-500' :
                         s.status === 'stopped' ? 'bg-red-500' :
                         'bg-green-500'
                     }`}></span>
-                    {s.status === 'completed' ? 'منتهي' :
+                    {s.status === 'archived' ? 'مؤرشف' :
+                     s.status === 'completed' ? 'منتهي' :
                      s.status === 'stopped' ? 'متوقف' :
                      'جاري العمل'}
                   </button>

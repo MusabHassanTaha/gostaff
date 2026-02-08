@@ -19,9 +19,9 @@ RUN npm run build
 # 4. Production Runner 
 FROM base AS runner 
 WORKDIR /app 
-ENV NODE_ENV production 
-ENV HOSTNAME "0.0.0.0" 
-ENV PORT 3000 
+ENV NODE_ENV=production 
+ENV HOSTNAME="0.0.0.0" 
+ENV PORT=3000 
 
 # Add sqlite3 for debugging (optional) and ensure shared libs are present
 RUN apk add --no-cache sqlite

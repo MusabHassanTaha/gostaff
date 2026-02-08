@@ -15,6 +15,7 @@ interface SearchableSelectProps {
   className?: string;
   disabled?: boolean;
   isMulti?: boolean;
+  clearable?: boolean;
 }
 
 export default function SearchableSelect({
@@ -25,6 +26,7 @@ export default function SearchableSelect({
   className = '',
   disabled = false,
   isMulti = false,
+  clearable = true,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -160,7 +162,7 @@ export default function SearchableSelect({
           </div>
           
           <div className="overflow-y-auto flex-1 p-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {!isMulti && (
+            {!isMulti && clearable && (
                 <div 
                 className={`px-4 py-3 text-sm rounded-lg cursor-pointer transition-all mb-1 font-bold ${!value ? 'bg-primary/5 text-primary' : 'text-gray-700 hover:bg-gray-50'}`}
                 onClick={() => handleSelect(undefined)}

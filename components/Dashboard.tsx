@@ -9,7 +9,7 @@ import { SiteCard } from './SiteCard';
 import { SortableSite } from './SortableSite';
 import { AvailableWorkers } from './AvailableWorkers';
 import { WorkerCard, WorkerCardView } from './WorkerCard';
-import { Wand2, Bell, QrCode, X, MapPin, Search, Briefcase, Smartphone, Save, Download, Plus, LayoutDashboard, Users, FileText, Truck, UserCircle, RefreshCw, Send, LogOut, Archive, PauseCircle, PlayCircle } from 'lucide-react';
+import { Wand2, Bell, QrCode, X, MapPin, Search, Briefcase, Smartphone, Save, Download, Plus, LayoutDashboard, Users, FileText, Truck, UserCircle, RefreshCw, Send, LogOut, Archive, PauseCircle, PlayCircle, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAppState } from '@/components/state/AppStateContext';
@@ -45,7 +45,7 @@ export default function Dashboard() {
       }
   };
 
-  const [projectStatusTab, setProjectStatusTab] = useState<'active' | 'stopped' | 'archived'>('active');
+  const [projectStatusTab, setProjectStatusTab] = useState<'active' | 'stopped' | 'archived' | 'completed'>('active');
   
   // Scoped View Logic based on Assignments
   const scopedState = React.useMemo(() => {
@@ -901,17 +901,24 @@ export default function Dashboard() {
              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border shadow-sm self-center">
                 <button 
                     onClick={() => setProjectStatusTab('active')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all ${projectStatusTab === 'active' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all ${projectStatusTab === 'active' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
                 >
                     <PlayCircle className="w-4 h-4" />
                     جاري العمل
                 </button>
                 <button 
                     onClick={() => setProjectStatusTab('stopped')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all ${projectStatusTab === 'stopped' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all ${projectStatusTab === 'stopped' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
                 >
                     <PauseCircle className="w-4 h-4" />
                     متوقف
+                </button>
+                <button 
+                    onClick={() => setProjectStatusTab('completed')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all ${projectStatusTab === 'completed' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                >
+                    <CheckCircle className="w-4 h-4" />
+                    منتهي
                 </button>
                 <button 
                     onClick={() => setProjectStatusTab('archived')}
@@ -983,7 +990,7 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col md:flex-row">
 
           {/* Sidebar - Available */}
-          <div className="w-full md:w-80 p-3 md:p-4 border-t md:border-t-0 md:border-l bg-white z-0 shrink-0 max-h-[70vh] md:max-h-none md:sticky md:top-[160px] md:h-[calc(100vh-160px)] md:overflow-y-auto transition-all duration-300">
+          <div className="w-full md:w-1/3 border-t md:border-t-0 md:border-l bg-white z-0 shrink-0 max-h-[45vh] md:max-h-none md:sticky md:top-[160px] md:h-[calc(100vh-160px)] md:overflow-y-auto transition-all duration-300 flex flex-col">
              <AvailableWorkers 
                 workers={activeWorkers.filter(w => !w.assignedSiteId && isWorkerMatch(w))}  
                 skills={state.skills}
@@ -997,25 +1004,24 @@ export default function Dashboard() {
                 onToggleAvailability={(user?.role as string) === 'viewer' || (user?.role as string) === 'engineer' ? undefined : handleToggleAvailability}
                 isMobile={isMobile}
                 onReturnAll={user?.role !== 'viewer' && user?.role !== 'engineer' ? handleReturnAllFromSites : undefined}
+                orientation="vertical"
              />
           </div>
           
           {/* Canvas - Sites */}
           <div className="flex-1 p-2 md:p-6 bg-slate-100 min-h-[500px]">
              <SortableContext items={scopedState.sites.map(s => s.id)} strategy={rectSortingStrategy}>
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
 
                  {scopedState.sites
                     .filter(site => {
                         // Status Filter
                         let status = site.status || 'active';
                         
-                        // Normalize 'completed' to appear in 'archived' tab
-                        if (status === 'completed') status = 'archived';
-                        
                         if (projectStatusTab === 'active' && status !== 'active') return false;
                         if (projectStatusTab === 'stopped' && status !== 'stopped') return false;
                         if (projectStatusTab === 'archived' && status !== 'archived') return false;
+                        if (projectStatusTab === 'completed' && status !== 'completed') return false;
 
                         if (!searchQuery) return true;
                         const hasMatchingWorker = activeWorkers.some(w => w.assignedSiteId === site.id && isWorkerMatch(w));

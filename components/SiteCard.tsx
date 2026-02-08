@@ -120,6 +120,7 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
                          { value: 'completed', label: 'منتهي' }
                        ]}
                          value={site.status || 'active'}
+                         clearable={false}
                          onChange={(val) => {
                            onUpdateSite(site.id, { status: val as any });
                          }}
@@ -210,12 +211,13 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
                      type="button"
                      onClick={() => site.status === 'stopped' && setShowNote(!showNote)}
                      className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                     site.status === 'archived' ? 'bg-gray-700 text-gray-300 border border-gray-600' :
                      site.status === 'completed' ? 'bg-blue-900 text-blue-100 border border-blue-700' :
                      site.status === 'stopped' ? 'bg-red-900 text-red-100 border border-red-700 cursor-pointer hover:bg-red-800' :
-                     site.status === 'archived' ? 'bg-gray-700 text-gray-300 border border-gray-600' :
                      'bg-green-900 text-green-100 border border-green-700'
                  }`}>
-                     {site.status === 'completed' ? 'منتهي' :
+                     {site.status === 'archived' ? 'مؤرشف' :
+                      site.status === 'completed' ? 'منتهي' :
                       site.status === 'stopped' ? 'متوقف' :
                       'جاري العمل'}
                  </button>

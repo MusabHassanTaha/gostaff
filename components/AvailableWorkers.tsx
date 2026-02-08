@@ -20,9 +20,10 @@ interface AvailableWorkersProps {
   onToggleAvailability?: (workerId: string, status: 'available' | 'absent') => void;
   isMobile?: boolean;
   onReturnAll?: () => void;
+  orientation?: 'vertical' | 'horizontal';
 }
 
-export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWorker, onToggleEngineer, sites, onAssign, searchQuery, onManageSkills, onToggleAvailability, isMobile, onReturnAll }: AvailableWorkersProps) {
+export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWorker, onToggleEngineer, sites, onAssign, searchQuery, onManageSkills, onToggleAvailability, isMobile, onReturnAll, orientation = 'vertical' }: AvailableWorkersProps) {
   const { setNodeRef } = useDroppable({
     id: 'available',
     data: { type: 'available' },
@@ -44,7 +45,7 @@ export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWork
   const restCount = workers.filter(w => w.availabilityStatus === 'rest').length;
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className={`flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${orientation === 'vertical' ? 'h-full' : 'w-full'}`}>
       {/* Header for Persistent Side Panel */}
       <div className="p-2 md:p-3 bg-gray-50 border-b flex justify-between items-center">
         <h2 className="font-bold text-gray-800 text-sm flex items-center gap-2">
@@ -120,11 +121,11 @@ export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWork
           </div>
       </div>
 
-      <div ref={setNodeRef} className="flex-1 overflow-y-auto bg-gray-50/50 p-2">
+      <div ref={setNodeRef} className={`bg-gray-50/50 p-2 ${orientation === 'vertical' ? 'flex-1 overflow-y-auto' : 'flex flex-row overflow-x-auto gap-3'}`}>
         {filteredWorkers.length > 0 ? (
           filteredWorkers.map((worker) => (
+            <div key={worker.id} className={orientation === 'horizontal' ? 'min-w-[300px] max-w-[300px]' : ''}>
             <WorkerCard 
-              key={worker.id} 
               worker={worker} 
               skillDef={skills.find(s => s.name === worker.skill)}
               onDelete={() => onDeleteWorker?.(worker.id)}
@@ -137,9 +138,10 @@ export function AvailableWorkers({ workers, skills, onDeleteWorker, onUpdateWork
               isCompact={false}
               isMobile={isMobile}
             />
+            </div>
           ))
         ) : (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm p-4">
+          <div className={`flex flex-col items-center justify-center text-gray-400 text-sm p-4 ${orientation === 'vertical' ? 'h-40' : 'w-full py-8'}`}>
             <Briefcase className="w-8 h-8 mb-2 opacity-20" />
             <p>
               {activeTab === 'waiting' ? 'لا يوجد عمال في الانتظار' : 
