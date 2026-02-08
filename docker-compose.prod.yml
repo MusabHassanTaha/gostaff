@@ -1,7 +1,7 @@
 services:
   labour-app-prod:
     # Use the image name for tagging, but build from source on the VPS
-    image: musabhassan2026/my-labour-app:latest
+    image: musabhassan2026/musabelmalik:latest
     build:
       context: .
       dockerfile: Dockerfile
