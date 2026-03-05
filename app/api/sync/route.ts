@@ -1,66 +1,14 @@
 import { NextResponse } from 'next/server';
-// Avoid importing large initial data here to prevent serverless import issues
-const FALLBACK_DATA: any = {
-  workers: [],
-  sites: [],
-  availableWorkerIds: [],
-  skills: [],
-  drivers: [],
-  users: [],
-  vehicles: [],
-  attendanceHistory: [],
-  notifications: [],
-  salaryData: {},
-  activityLogs: [],
-  documents: [],
-  documentCategories: []
-};
+import { readData, writeData } from '@/lib/db';
 
 // Force dynamic to ensure we always fetch fresh data
 export const dynamic = 'force-dynamic';
 // Ensure Node.js runtime for fs/path access
 export const runtime = 'nodejs';
 
-async function getDBPath() {
-  const path = await import('node:path');
-  return path.join(process.cwd(), 'data', 'db.json');
-}
-
-async function readData() {
-  const fs = await import('node:fs');
-  const dbPath = await getDBPath();
-  if (!fs.existsSync(dbPath as any)) {
-    return FALLBACK_DATA;
-  }
-  try {
-    const fileContent = fs.readFileSync(dbPath as any, 'utf-8');
-    return JSON.parse(fileContent);
-  } catch (error) {
-    console.error('Error reading DB file:', error);
-    return FALLBACK_DATA;
-  }
-}
-
-async function writeData(data: any) {
-  try {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const dbPath = await getDBPath();
-    const dir = path.dirname(dbPath as any);
-    if (!fs.existsSync(dir as any)) {
-      fs.mkdirSync(dir as any, { recursive: true });
-    }
-    fs.writeFileSync(dbPath as any, JSON.stringify(data, null, 2), 'utf-8');
-    return true;
-  } catch (error) {
-    console.error('Error writing DB file:', error);
-    return false;
-  }
-}
-
 export async function GET() {
   try {
-    const data = await readData();
+    const data = readData();
   
     const payload = {
       timestamp: Date.now(),
@@ -80,7 +28,7 @@ export async function POST(req: Request) {
     const newData = body.data || body;
 
     // Save the data to JSON file
-    const currentData = await readData();
+    const currentData = readData();
     
     // Simple merge strategy
     const updatedData = {
@@ -97,11 +45,11 @@ export async function POST(req: Request) {
     if (newData.documents) updatedData.documents = newData.documents;
     if (newData.documentCategories) updatedData.documentCategories = newData.documentCategories;
 
-    await writeData(updatedData);
+    writeData(updatedData);
 
     return NextResponse.json({ success: true, timestamp: Date.now() });
-  } catch (error) {
-    console.error('Sync error:', error);
+  } catch (e) {
+    console.error('Sync POST error:', e);
     return NextResponse.json({ success: false, error: 'Sync failed' }, { status: 500 });
   }
 }

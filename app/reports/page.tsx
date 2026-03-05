@@ -97,11 +97,20 @@ function ReportsContent() {
   // Worker Search State
   const [workerSearchQuery, setWorkerSearchQuery] = useState('');
 
+  // Server-side Report Data
+  const [reportData, setReportData] = useState<any>(null);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+
+
+
   const violationSearchResults = useMemo(() => {
     const query = violationSearchQuery.toLowerCase();
     const results: { vehicle: any; violation: any }[] = [];
 
-    (state.vehicles || []).forEach(vehicle => {
+    // Use server data if available
+    const sourceVehicles = (view === 'violations' && reportData?.vehicles) ? reportData.vehicles : (state.vehicles || []);
+
+    sourceVehicles.forEach((vehicle: any) => {
       // If vehicle filter is active and doesn't match, skip this vehicle entirely
       if (violationSearchVehicle && vehicle.id !== violationSearchVehicle) return;
 
@@ -128,7 +137,7 @@ function ReportsContent() {
     });
 
     return results;
-  }, [state.vehicles, violationSearchQuery, violationSearchDriver, violationSearchVehicle, violationSearchStartDate, violationSearchEndDate]);
+  }, [state.vehicles, violationSearchQuery, violationSearchDriver, violationSearchVehicle, violationSearchStartDate, violationSearchEndDate, reportData, view]);
 
 
   // Date Filters for Maintenance Report
@@ -153,10 +162,13 @@ function ReportsContent() {
   }, [state.workers]);
 
   const filteredWorkers = useMemo(() => {
+    // Use server data if available and relevant to current view
+    const source = (reportData?.workers && (view === 'projects' || view === 'leave' || view === 'drivers' || view === 'violations')) ? reportData.workers : state.workers;
+
     const query = workerSearchQuery.toLowerCase();
-    if (!query) return state.workers;
+    if (!query) return source;
     
-    return state.workers.filter(w => 
+    return source.filter((w: any) => 
       (w.name && w.name.toLowerCase().includes(query)) ||
       (w.englishName && w.englishName.toLowerCase().includes(query)) ||
       (w.nationality && w.nationality.toLowerCase().includes(query)) ||
@@ -164,7 +176,7 @@ function ReportsContent() {
       (w.iqamaNumber && w.iqamaNumber.includes(query)) ||
       (w.phone && w.phone.includes(query))
     );
-  }, [state.workers, workerSearchQuery]);
+  }, [state.workers, workerSearchQuery, reportData, view]);
 
   useEffect(() => {
     const v = searchParams.get('view');
@@ -195,6 +207,39 @@ function ReportsContent() {
       return cls === iqamaStatusFilter;
     });
   }, [state.workers, iqamaStatusFilter]);
+
+  const filteredDrivers = useMemo(() => {
+    // If server data available for drivers, use it
+    if (view === 'drivers' && reportData?.workers) {
+        return reportData.workers;
+    }
+
+    return state.workers
+        .filter(w => w.skill === 'Driver' || w.skill === 'سائق')
+        .filter(d => {
+            if (!driverSearchStartDate && !driverSearchEndDate) return true;
+            
+            const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
+            if (!vehicle) return false;
+
+            const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+            const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+            if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+
+            const hasMaintenance = vehicle.maintenanceHistory?.some(m => {
+                const mDate = new Date(m.date);
+                return mDate >= start && mDate <= end;
+            });
+
+            const hasViolations = vehicle.violations?.some(v => {
+                const vDate = new Date(v.date);
+                return vDate >= start && vDate <= end;
+            });
+
+            return hasMaintenance || hasViolations;
+        });
+  }, [state.workers, state.vehicles, driverSearchStartDate, driverSearchEndDate, reportData, view]);
+
   const insuranceFiltered = useMemo(() => {
     const arr = state.workers.filter(w => w.status !== 'pending' && w.insuranceExpiry);
     if (insuranceStatusFilter === 'all') return arr;
@@ -360,8 +405,9 @@ function ReportsContent() {
     const siteIds = new Set(state.sites.map(s => s.id));
     
     // Apply Date Range Filter to stats if active
-    let relevantWorkers = state.workers.filter(w => w.status !== 'pending');
-    if (view === 'projects' && (projectSearchStartDate || projectSearchEndDate)) {
+    let relevantWorkers = (view === 'projects' && reportData?.workers) ? reportData.workers : state.workers.filter(w => w.status !== 'pending');
+
+    if (view === 'projects' && !reportData && (projectSearchStartDate || projectSearchEndDate)) {
         relevantWorkers = relevantWorkers.filter(w => {
             if (!w.hireDate) return false;
             if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
@@ -373,7 +419,7 @@ function ReportsContent() {
     const workersInProjects = relevantWorkers.filter(w => w.assignedSiteId && siteIds.has(w.assignedSiteId)).length;
 
     return { totalProjects, activeProjects, stoppedProjects, completedProjects, workersInProjects };
-  }, [state.sites, state.workers, view, projectSearchStartDate, projectSearchEndDate]);
+  }, [state.sites, state.workers, view, projectSearchStartDate, projectSearchEndDate, reportData]);
 
   // waitingData removed
 
@@ -387,10 +433,57 @@ function ReportsContent() {
     });
     const [searchEnd, setSearchEnd] = useState(() => new Date().toISOString().slice(0, 10));
 
+    useEffect(() => {
+        const fetchReport = async () => {
+            setIsLoadingReport(true);
+            try {
+                const params = new URLSearchParams();
+                params.set('view', view);
+                
+                if (view === 'projects') {
+                    if (projectSearchStartDate) params.set('startDate', projectSearchStartDate);
+                    if (projectSearchEndDate) params.set('endDate', projectSearchEndDate);
+                } else if (view === 'leave') {
+                    if (searchStart) params.set('startDate', searchStart);
+                    if (searchEnd) params.set('endDate', searchEnd);
+                } else if (view === 'drivers') {
+                    if (driverSearchStartDate) params.set('startDate', driverSearchStartDate);
+                    if (driverSearchEndDate) params.set('endDate', driverSearchEndDate);
+                } else if (view === 'violations') {
+                        if (violationSearchStartDate) params.set('startDate', violationSearchStartDate);
+                        if (violationSearchEndDate) params.set('endDate', violationSearchEndDate);
+                } else if (view === 'maintenance') {
+                        if (maintenanceStartDate) params.set('startDate', maintenanceStartDate);
+                        if (maintenanceEndDate) params.set('endDate', maintenanceEndDate);
+                } else if (view === 'vehicles') {
+                        if (vehicleSearchStartDate) params.set('startDate', vehicleSearchStartDate);
+                        if (vehicleSearchEndDate) params.set('endDate', vehicleSearchEndDate);
+                }
+                
+                const res = await fetch(`/api/reports?${params.toString()}`);
+                const json = await res.json();
+                if (json.success) {
+                    setReportData(json.data);
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoadingReport(false);
+            }
+        };
+        
+        const timer = setTimeout(fetchReport, 300);
+        return () => clearTimeout(timer);
+    }, [view, projectSearchStartDate, projectSearchEndDate, searchStart, searchEnd, driverSearchStartDate, driverSearchEndDate, violationSearchStartDate, violationSearchEndDate, maintenanceStartDate, maintenanceEndDate, vehicleSearchStartDate, vehicleSearchEndDate]);
+
     const filteredHistoryRows = useMemo(() => {
         if (!showHistory) return [];
         const rows: { w: any, h: any }[] = [];
-        state.workers.forEach(w => {
+        
+        // Use server data if available
+        const sourceWorkers = (view === 'leave' && reportData?.workers) ? reportData.workers : state.workers;
+        
+        sourceWorkers.forEach((w: any) => {
             if (w.absenceHistory && w.absenceHistory.length > 0) {
                  // Pre-filter by search query to optimize
                  if (absenceSearch) {
@@ -400,7 +493,7 @@ function ReportsContent() {
                                 (w.iqamaNumber && w.iqamaNumber.includes(query));
                     if (!match) return;
                 }
-                w.absenceHistory.forEach(h => {
+                w.absenceHistory.forEach((h: any) => {
                     if (h.date >= searchStart && h.date <= searchEnd) {
                         rows.push({ w, h });
                     }
@@ -408,7 +501,7 @@ function ReportsContent() {
             }
         });
         return rows.sort((a, b) => new Date(b.h.date).getTime() - new Date(a.h.date).getTime());
-    }, [state.workers, showHistory, searchStart, searchEnd, absenceSearch]);
+    }, [state.workers, showHistory, searchStart, searchEnd, absenceSearch, reportData, view]);
 
   const handleExportExcel = () => {
     const wb = utils.book_new();
@@ -574,16 +667,48 @@ function ReportsContent() {
     }
 
     if (view === 'drivers') {
-      const drivers = state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق');
+      const drivers = filteredDrivers;
+      // Use server data if available, otherwise fall back to state
+      const sourceVehicles = (view === 'drivers' && reportData?.vehicles) ? reportData.vehicles : state.vehicles;
+
       const driverRows: any[] = drivers.map(d => {
          const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
          let totalTransported = 0;
-        const sitesDetails = assignedSites.map(s => {
+         const sitesDetails = assignedSites.map(s => {
              const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
              const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
              totalTransported += Number(count);
              return `${s.name} (${count})`;
          }).join('، ');
+
+         // Get Maintenance Details
+         const vehicle = sourceVehicles?.find((v: any) => v.plateNumber === d.driverCarPlate);
+         const maintenanceInRange = vehicle?.maintenanceHistory?.filter((m: any) => {
+            if (!driverSearchStartDate && !driverSearchEndDate) return true;
+            const mDate = new Date(m.date);
+            const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+            const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+            if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+            return mDate >= start && mDate <= end;
+         }) || [];
+
+         const maintenanceStr = maintenanceInRange.map((m: any) => 
+            `${m.type === 'oil_change' ? 'تغيير زيت' : (m.type === 'repair' ? 'إصلاح' : 'أخرى')} (${m.date}) - ${m.cost} ريال`
+         ).join('\n');
+
+         // Get Violations Details
+         const violationsInRange = vehicle?.violations?.filter((v: any) => {
+            if (!driverSearchStartDate && !driverSearchEndDate) return true;
+            const vDate = new Date(v.date);
+            const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+            const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+            if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+            return vDate >= start && vDate <= end;
+         }) || [];
+
+         const violationsStr = violationsInRange.map((v: any) => 
+            `${v.type} (${v.date}) - ${v.cost || 0} ريال`
+         ).join('\n');
 
          return {
              'اسم السائق': d.englishName ? `${d.name} - ${d.englishName}` : d.name,
@@ -593,13 +718,20 @@ function ReportsContent() {
              'السعة': d.driverCapacity || '',
              'عدد المواقع': assignedSites.length,
              'إجمالي المنقولين': totalTransported,
-             'تفاصيل المواقع': sitesDetails
+             'تفاصيل المواقع': sitesDetails,
+             'صيانة السيارة': maintenanceStr,
+             'المخالفات': violationsStr,
+             'تكلفة الصيانة': maintenanceInRange.reduce((acc: number, m: any) => acc + (Number(m.cost) || 0), 0),
+             'تكلفة المخالفات': violationsInRange.reduce((acc: number, v: any) => acc + (Number(v.cost) || 0), 0)
          };
       });
 
       // Calculate Totals for Excel
       const totalSites = driverRows.reduce((sum, row) => sum + (Number(row['عدد المواقع']) || 0), 0);
       const totalTransportedAll = driverRows.reduce((sum, row) => sum + (Number(row['إجمالي المنقولين']) || 0), 0);
+      
+      const totalMaintenanceCost = driverRows.reduce((sum, row) => sum + (Number(row['تكلفة الصيانة']) || 0), 0);
+      const totalViolationsCost = driverRows.reduce((sum, row) => sum + (Number(row['تكلفة المخالفات']) || 0), 0);
 
       // Add Empty Row for spacing
       driverRows.push({});
@@ -613,11 +745,19 @@ function ReportsContent() {
           'السعة': '',
           'عدد المواقع': totalSites,
           'إجمالي المنقولين': totalTransportedAll,
-          'تفاصيل المواقع': ''
+          'تفاصيل المواقع': '',
+          'صيانة السيارة': `${totalMaintenanceCost} ريال`,
+          'المخالفات': `${totalViolationsCost} ريال`
+      });
+
+      // Remove temp columns
+      driverRows.forEach(row => {
+          delete row['تكلفة الصيانة'];
+          delete row['تكلفة المخالفات'];
       });
 
       const wsDrivers = utils.json_to_sheet(driverRows);
-      wsDrivers['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 50 }];
+      wsDrivers['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 50 }, { wch: 40 }, { wch: 40 }];
       utils.book_append_sheet(wb, wsDrivers, "السائقين");
       writeFile(wb, fileName);
       return;
@@ -2173,28 +2313,11 @@ function ReportsContent() {
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">إجمالي المنقولين</th>
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">تفاصيل المواقع</th>
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">صيانة السيارة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">المخالفات</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
-                            {state.workers
-                                .filter(w => w.skill === 'Driver' || w.skill === 'سائق')
-                                .filter(d => {
-                                    if (!driverSearchStartDate && !driverSearchEndDate) return true;
-                                    
-                                    const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
-                                    if (!vehicle) return false;
-
-                                    const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
-                                    const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
-                                    if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
-
-                                    const hasMaintenance = vehicle.maintenanceHistory?.some(m => {
-                                        const mDate = new Date(m.date);
-                                        return mDate >= start && mDate <= end;
-                                    });
-
-                                    return hasMaintenance;
-                                })
+                            {filteredDrivers
                                 .map((d, idx) => {
                                 const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                 let totalTransported = 0;
@@ -2206,14 +2329,25 @@ function ReportsContent() {
                                 });
 
                                 // Get Maintenance Details for display
-                                const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
-                                const maintenanceInRange = vehicle?.maintenanceHistory?.filter(m => {
+                                const sourceVehicles = (view === 'drivers' && reportData?.vehicles) ? reportData.vehicles : state.vehicles;
+                                const vehicle = sourceVehicles?.find((v: any) => v.plateNumber === d.driverCarPlate);
+                                
+                                const maintenanceInRange = vehicle?.maintenanceHistory?.filter((m: any) => {
                                     if (!driverSearchStartDate && !driverSearchEndDate) return true;
                                     const mDate = new Date(m.date);
                                     const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
                                     const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
                                     if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
                                     return mDate >= start && mDate <= end;
+                                }) || [];
+
+                                const violationsInRange = vehicle?.violations?.filter((v: any) => {
+                                    if (!driverSearchStartDate && !driverSearchEndDate) return true;
+                                    const vDate = new Date(v.date);
+                                    const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                    const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                    if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+                                    return vDate >= start && vDate <= end;
                                 }) || [];
 
                                 return (
@@ -2250,11 +2384,29 @@ function ReportsContent() {
                                         <td className="px-5 py-4 text-center print:py-1.5 print:px-2 print:text-xs">
                                             {maintenanceInRange.length > 0 ? (
                                                 <div className="flex flex-col gap-1">
-                                                    {maintenanceInRange.map((m, i) => (
+                                                    {maintenanceInRange.map((m: any, i: number) => (
                                                         <span key={i} className="inline-flex flex-col items-start px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-100 print:bg-white print:border-black print:text-black">
                                                             <span className="font-bold">{m.type}</span>
                                                             <span className="font-mono text-[10px]">{m.date}</span>
                                                             {m.cost && <span className="text-[10px]">({m.cost} ريال)</span>}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 print:bg-white print:border-gray-400 print:text-gray-400">
+                                                    <X className="w-3 h-3 print:hidden" />
+                                                    لا يوجد
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-5 py-4 text-center print:py-1.5 print:px-2 print:text-xs">
+                                            {violationsInRange.length > 0 ? (
+                                                <div className="flex flex-col gap-1">
+                                                    {violationsInRange.map((v: any, i: number) => (
+                                                        <span key={i} className="inline-flex flex-col items-start px-2 py-1 rounded text-xs font-medium bg-red-50 text-red-700 border border-red-100 print:bg-white print:border-black print:text-black">
+                                                            <span className="font-bold">{v.type}</span>
+                                                            <span className="font-mono text-[10px]">{v.date}</span>
+                                                            {v.cost && <span className="text-[10px]">({v.cost} ريال)</span>}
                                                         </span>
                                                     ))}
                                                 </div>
@@ -2271,28 +2423,13 @@ function ReportsContent() {
                         </tbody>
                         <tfoot className="bg-gray-50 font-bold print:bg-white print:table-footer-group">
                             {(() => {
-                                const drivers = state.workers
-                                    .filter(w => w.skill === 'Driver' || w.skill === 'سائق')
-                                    .filter(d => {
-                                        if (!driverSearchStartDate && !driverSearchEndDate) return true;
-                                        
-                                        const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
-                                        if (!vehicle) return false;
-
-                                        const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
-                                        const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
-                                        if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
-
-                                        const hasMaintenance = vehicle.maintenanceHistory?.some(m => {
-                                            const mDate = new Date(m.date);
-                                            return mDate >= start && mDate <= end;
-                                        });
-
-                                        return hasMaintenance;
-                                    });
+                                const drivers = filteredDrivers;
 
                                 let grandTotalSites = 0;
                                 let grandTotalTransported = 0;
+                                let grandTotalMaintenance = 0;
+                                let grandTotalViolations = 0;
+
                                 drivers.forEach(d => {
                                     const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                     grandTotalSites += assignedSites.length;
@@ -2301,13 +2438,39 @@ function ReportsContent() {
                                         const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
                                         grandTotalTransported += Number(count);
                                     });
+
+                                    // Calculate Maintenance and Violations for this driver in range
+                                    const sourceVehicles = (view === 'drivers' && reportData?.vehicles) ? reportData.vehicles : state.vehicles;
+                                    const vehicle = sourceVehicles?.find((v: any) => v.plateNumber === d.driverCarPlate);
+                                    
+                                    const maintenanceInRange = vehicle?.maintenanceHistory?.filter((m: any) => {
+                                        if (!driverSearchStartDate && !driverSearchEndDate) return true;
+                                        const mDate = new Date(m.date);
+                                        const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                        const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                        if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+                                        return mDate >= start && mDate <= end;
+                                    }) || [];
+                                    grandTotalMaintenance += maintenanceInRange.reduce((acc: number, m: any) => acc + (Number(m.cost) || 0), 0);
+                                    
+                                    const violationsInRange = vehicle?.violations?.filter((v: any) => {
+                                        if (!driverSearchStartDate && !driverSearchEndDate) return true;
+                                        const vDate = new Date(v.date);
+                                        const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                        const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                        if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+                                        return vDate >= start && vDate <= end;
+                                    }) || [];
+                                    grandTotalViolations += violationsInRange.reduce((acc: number, v: any) => acc + (Number(v.cost) || 0), 0);
                                 });
                                 return (
                                     <tr>
                                         <td colSpan={3} className="px-5 py-4 text-left text-gray-800 font-black border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm">الإجمالي الكلي:</td>
                                         <td className="px-5 py-4 text-center text-indigo-800 font-black text-xl border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center">{grandTotalSites}</td>
                                         <td className="px-5 py-4 text-center text-indigo-800 font-black text-xl border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center">{grandTotalTransported}</td>
-                                        <td colSpan={2} className="px-5 py-4 border-t-2 border-gray-400 print:border-t-[3px] print:border-black"></td>
+                                        <td className="px-5 py-4 border-t-2 border-gray-400 print:border-t-[3px] print:border-black"></td>
+                                        <td className="px-5 py-4 text-center text-green-700 font-black text-lg border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center" dir="ltr">{grandTotalMaintenance > 0 ? `${grandTotalMaintenance} ريال` : '-'}</td>
+                                        <td className="px-5 py-4 text-center text-red-700 font-black text-lg border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center" dir="ltr">{grandTotalViolations > 0 ? `${grandTotalViolations} ريال` : '-'}</td>
                                     </tr>
                                 );
                             })()}

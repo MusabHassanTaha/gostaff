@@ -3588,6 +3588,69 @@
   },
   "activityLogs": [
     {
+      "id": "act-1772754209120-608262",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772754209120
+    },
+    {
+      "id": "act-1772754206660-948719",
+      "userId": "admin",
+      "action": "view",
+      "route": "/documents",
+      "timestamp": 1772754206660
+    },
+    {
+      "id": "act-1772754187329-692453",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772754187329
+    },
+    {
+      "id": "act-1772751971848-986905",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772751971848
+    },
+    {
+      "id": "act-1772750943988-667173",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772750943988
+    },
+    {
+      "id": "act-1772750941494-711932",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772750941494
+    },
+    {
+      "id": "act-1772750940243-784720",
+      "userId": "admin",
+      "action": "view",
+      "route": "/projects",
+      "timestamp": 1772750940243
+    },
+    {
+      "id": "act-1772750938127-301846",
+      "userId": "admin",
+      "action": "view",
+      "route": "/workers",
+      "timestamp": 1772750938127
+    },
+    {
+      "id": "act-1772750932642-369944",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772750932642
+    },
+    {
       "id": "act-1772750190182-800935",
       "userId": "admin",
       "action": "view",
