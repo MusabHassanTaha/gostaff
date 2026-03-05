@@ -1,39 +1,56 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { initialAppState } from '@/lib/data';
+// Avoid importing large initial data here to prevent serverless import issues
+const FALLBACK_DATA: any = {
+  workers: [],
+  sites: [],
+  availableWorkerIds: [],
+  skills: [],
+  drivers: [],
+  users: [],
+  vehicles: [],
+  attendanceHistory: [],
+  notifications: [],
+  salaryData: {},
+  activityLogs: [],
+  documents: [],
+  documentCategories: []
+};
 
 // Force dynamic to ensure we always fetch fresh data
 export const dynamic = 'force-dynamic';
+// Ensure Node.js runtime for fs/path access
+export const runtime = 'nodejs';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'db.json');
-
-function getDBPath() {
-  return DB_PATH;
+async function getDBPath() {
+  const path = await import('node:path');
+  return path.join(process.cwd(), 'data', 'db.json');
 }
 
-function readData() {
-  const dbPath = getDBPath();
-  if (!fs.existsSync(dbPath)) {
-    return initialAppState;
+async function readData() {
+  const fs = await import('node:fs');
+  const dbPath = await getDBPath();
+  if (!fs.existsSync(dbPath as any)) {
+    return FALLBACK_DATA;
   }
   try {
-    const fileContent = fs.readFileSync(dbPath, 'utf-8');
+    const fileContent = fs.readFileSync(dbPath as any, 'utf-8');
     return JSON.parse(fileContent);
   } catch (error) {
     console.error('Error reading DB file:', error);
-    return initialAppState;
+    return FALLBACK_DATA;
   }
 }
 
-function writeData(data: any) {
+async function writeData(data: any) {
   try {
-    const dbPath = getDBPath();
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dbPath = await getDBPath();
+    const dir = path.dirname(dbPath as any);
+    if (!fs.existsSync(dir as any)) {
+      fs.mkdirSync(dir as any, { recursive: true });
     }
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(dbPath as any, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (error) {
     console.error('Error writing DB file:', error);
@@ -42,14 +59,19 @@ function writeData(data: any) {
 }
 
 export async function GET() {
-  const data = readData();
+  try {
+    const data = await readData();
   
-  const payload = {
-    timestamp: Date.now(),
-    data: data
-  };
+    const payload = {
+      timestamp: Date.now(),
+      data: data
+    };
 
-  return NextResponse.json(payload);
+    return NextResponse.json(payload);
+  } catch (e) {
+    console.error('Sync GET error:', e);
+    return NextResponse.json({ success: false, error: 'Sync failed' }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
@@ -58,7 +80,7 @@ export async function POST(req: Request) {
     const newData = body.data || body;
 
     // Save the data to JSON file
-    const currentData = readData();
+    const currentData = await readData();
     
     // Simple merge strategy
     const updatedData = {
@@ -71,8 +93,11 @@ export async function POST(req: Request) {
     if (newData.sites) updatedData.sites = newData.sites;
     if (newData.vehicles) updatedData.vehicles = newData.vehicles;
     if (newData.users) updatedData.users = newData.users;
+    if (newData.activityLogs) updatedData.activityLogs = newData.activityLogs;
+    if (newData.documents) updatedData.documents = newData.documents;
+    if (newData.documentCategories) updatedData.documentCategories = newData.documentCategories;
 
-    writeData(updatedData);
+    await writeData(updatedData);
 
     return NextResponse.json({ success: true, timestamp: Date.now() });
   } catch (error) {

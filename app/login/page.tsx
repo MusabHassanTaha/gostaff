@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/state/AuthContext';
 import { Lock, UserPlus, HelpCircle, Mail, User, Key, ArrowRight, Eye, EyeOff, AlertCircle, X } from 'lucide-react';
 
@@ -11,6 +12,7 @@ type Tab = 'login' | 'register' | 'forgot';
 export default function LoginPage() {
   const { login, addUser, users } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('login');
   const [showThanks, setShowThanks] = useState(false);
   
@@ -24,6 +26,14 @@ export default function LoginPage() {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Prefill username when coming from QR (e.g., /login?u=admin)
+  useEffect(() => {
+    const u = searchParams.get('u');
+    if (u && typeof u === 'string' && !loginUser) {
+      setLoginUser(u);
+    }
+  }, [searchParams]); 
 
   // Register State
   const [regUser, setRegUser] = useState('');
@@ -123,20 +133,18 @@ export default function LoginPage() {
             body: JSON.stringify({
                 email: found.email,
                 subject: 'استعادة كلمة المرور - نظام إدارة العمال',
-                text: `مرحباً ${found.username}،\n\nبيانات الدخول الخاصة بك هي:\nاسم المستخدم: ${found.username}\nكلمة المرور: ${found.password}\n\nيمكنك تسجيل الدخول الآن.`
+                text: `مرحباً ${found.username}،\n\nتم استلام طلب استعادة كلمة المرور لحسابك في نظام إدارة العمال.\n\nلأسباب أمنية لا نرسل كلمات المرور عبر البريد.\nسيقوم مسؤول النظام بالتواصل معك لتحديث كلمة المرور أو تزويدك ببيانات الدخول الجديدة.\n\nشكرًا لك.`
             }),
         });
 
         if (res.ok) {
-            setForgotMsg(`تم إرسال بيانات الدخول إلى بريدك الإلكتروني (${found.email}) بنجاح.`);
+            setForgotMsg(`تم إرسال طلب استعادة كلمة المرور إلى مسؤول النظام (${found.email}). سيتم التواصل معك قريباً.`);
         } else {
             const data = await res.json();
             if (res.status === 503) {
-                 // Config missing - show credentials as fallback
-                 setForgotMsg(`خدمة البريد لم يتم إعدادها بعد. (بياناتك هي: المستخدم: ${found.username} / كلمة المرور: ${found.password})`);
+                 setForgotMsg('خدمة البريد لم يتم إعدادها بعد. يرجى التواصل مع مسؤول النظام لاستعادة كلمة المرور.');
             } else {
-                 // Other error - show credentials as fallback
-                 setForgotMsg(`فشل الإرسال. (بياناتك هي: المستخدم: ${found.username} / كلمة المرور: ${found.password})`);
+                 setForgotMsg('فشل إرسال رسالة الاستعادة. يرجى المحاولة لاحقاً أو التواصل مع مسؤول النظام.');
             }
         }
     } catch (error) {
@@ -157,8 +165,15 @@ export default function LoginPage() {
                     className="object-contain"
                 />
             </div>
-            <h1 className="text-2xl font-medium mb-2">لوحة التحكم</h1>
-            <p className="text-slate-400 text-sm">نظام إدارة العمال والمشاريع</p>
+            <h1 className="text-2xl font-medium mb-2">نظام إدارة العمال</h1>
+            <p className="text-slate-400 text-sm">لوحة تحكم نظام إدارة العمال والمشاريع</p>
+            <div className="mt-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs leading-relaxed max-w-xs">
+              <div className="font-bold text-amber-300 mb-0.5">رمضان مبارك</div>
+              <div className="text-amber-100">نسأل الله أن يتقبل منا ومنكم صالح الأعمال وأن يجعله شهر خير وبركة.</div>
+              <div className="mt-1.5 text-[11px] text-amber-200" dir="ltr">
+                Ramadan Mubarak! May this holy month bring you peace, blessings, and success.
+              </div>
+            </div>
             <button
               onClick={() => setShowThanks(true)}
               className="absolute left-4 top-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
@@ -260,7 +275,7 @@ export default function LoginPage() {
                         disabled={loginLoading}
                         className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-4"
                     >
-                        {loginLoading ? 'جاري التحقق...' : 'تسجيل الدخول'}
+                        {loginLoading ? 'جاري التحقق...' : 'دخول إلى النظام'}
                         {!loginLoading && <ArrowRight className="w-5 h-5" />}
                     </button>
                 </form>
@@ -422,7 +437,10 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="bg-gray-50 px-6 py-4 text-center border-t border-gray-100">
-            <p className="text-xs text-gray-400">© 2026 نظام إدارة العمال</p>
+            <p className="text-xs text-gray-400 flex items-center justify-center gap-1">
+              <span>تصميم مصعب الملك</span>
+              <span dir="ltr">© 2026</span>
+            </p>
         </div>
       </div>
     </main>

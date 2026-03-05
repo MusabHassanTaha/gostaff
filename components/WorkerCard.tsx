@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Worker, SkillDefinition, Site } from '@/types';
-import { GripVertical, User, Pencil, Trash, X, Check, HardHat, MessageCircle, ChevronDown, MoveRight, UserX, UserCheck, Eye, CalendarClock, ArrowRightLeft, Briefcase } from 'lucide-react';
+import { GripVertical, User, Pencil, Trash, X, Check, HardHat, MessageCircle, ChevronDown, MoveRight, UserX, UserCheck, Eye, CalendarClock, ArrowRightLeft, Briefcase, Search, Crown } from 'lucide-react';
 import { daysRemaining, statusClasses, labelFor, calculateDaysWorked } from '@/lib/date';
 import { useAuth } from '@/components/state/AuthContext';
 import { StatusModal } from './StatusModal';
@@ -17,6 +17,8 @@ interface WorkerCardProps {
   onDelete?: () => void;
   onUpdate?: (newName: string) => void;
   onToggleEngineer?: () => void;
+  isForeman?: boolean;
+  onToggleForeman?: () => void;
   siteId?: string;
   whatsAppLink?: string;
   sites?: Site[];
@@ -27,7 +29,7 @@ interface WorkerCardProps {
   isMobile?: boolean;
 }
 
-export function WorkerCard({ worker, skillDef, onDelete, onUpdate, onToggleEngineer, siteId, whatsAppLink, sites, onAssign, hideSkillLabel, onToggleAvailability, isCompact, isMobile }: WorkerCardProps) {
+export function WorkerCard({ worker, skillDef, onDelete, onUpdate, onToggleEngineer, isForeman, onToggleForeman, siteId, whatsAppLink, sites, onAssign, hideSkillLabel, onToggleAvailability, isCompact, isMobile }: WorkerCardProps) {
   const { user } = useAuth();
   const {
     attributes,
@@ -55,6 +57,7 @@ export function WorkerCard({ worker, skillDef, onDelete, onUpdate, onToggleEngin
     <WorkerCardView
       worker={worker}
       skillDef={skillDef}
+      isForeman={isForeman}
       isCompact={isCompact}
       isDragging={isDragging}
       setNodeRef={setNodeRef}
@@ -65,6 +68,7 @@ export function WorkerCard({ worker, skillDef, onDelete, onUpdate, onToggleEngin
       onDelete={onDelete}
       onUpdate={onUpdate}
       onToggleEngineer={onToggleEngineer}
+      onToggleForeman={onToggleForeman}
       siteId={siteId}
       whatsAppLink={whatsAppLink}
       sites={sites}
@@ -87,7 +91,7 @@ interface WorkerCardViewProps extends WorkerCardProps {
 }
 
 export function WorkerCardView({ 
-  worker, skillDef, onDelete, onUpdate, onToggleEngineer, siteId, whatsAppLink, sites, onAssign, hideSkillLabel, onToggleAvailability, isCompact, isMobile,
+  worker, skillDef, onDelete, onUpdate, onToggleEngineer, isForeman, onToggleForeman, siteId, whatsAppLink, sites, onAssign, hideSkillLabel, onToggleAvailability, isCompact, isMobile,
   user, isDragging, setNodeRef, style, attributes, listeners, isOverlay
 }: WorkerCardViewProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -95,35 +99,59 @@ export function WorkerCardView({
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const buttonRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [editName, setEditName] = useState(worker.name);
   const [mounted, setMounted] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [destinationSearch, setDestinationSearch] = useState('');
   useEffect(() => setMounted(true), []);
 
+  // تصفية المشاريع حسب البحث (الاسم أو الكود) مع دعم أفضل للغات
+  const filteredSites = useMemo(() => {
+    if (!sites) return [];
+    const raw = destinationSearch.trim();
+    if (!raw) return sites;
+
+    const query = raw.toLocaleLowerCase();
+
+    const normalize = (value?: string | null) =>
+      (value || '').toLocaleLowerCase();
+
+    return sites.filter(site => {
+      const name = normalize(site.name);
+      const code = normalize((site as any).code);
+      const englishName = normalize((site as any).englishName);
+      return (
+        name.includes(query) ||
+        (!!code && code.includes(query)) ||
+        (!!englishName && englishName.includes(query))
+      );
+    });
+  }, [sites, destinationSearch]);
+
+  // إعادة تعيين حقل البحث عند فتح نافذة النقل حتى لا يبقى بحث قديم
   useEffect(() => {
     if (showMoveMenu) {
-      const handleClose = (e: Event) => {
-          // If scroll event, ignore if inside menu
-          if (e.type === 'scroll' && menuRef.current && menuRef.current.contains(e.target as Node)) {
-              return;
-          }
-          // If click event, ignore if inside menu
-          if (e.type === 'click' && menuRef.current && menuRef.current.contains(e.target as Node)) {
-              return;
-          }
-          setShowMoveMenu(false);
-      };
-
-      window.addEventListener('click', handleClose);
-      window.addEventListener('resize', handleClose);
-      window.addEventListener('scroll', handleClose, { capture: true });
-      return () => {
-         window.removeEventListener('click', handleClose);
-         window.removeEventListener('resize', handleClose);
-         window.removeEventListener('scroll', handleClose, { capture: true });
-      };
+      setDestinationSearch('');
     }
+  }, [showMoveMenu]);
+
+  useEffect(() => {
+    if (!showMoveMenu) return;
+
+    const handleClose = (e: Event) => {
+      if (e.type === 'click' && menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
+      setShowMoveMenu(false);
+    };
+
+    window.addEventListener('click', handleClose);
+
+    return () => {
+      window.removeEventListener('click', handleClose);
+    };
   }, [showMoveMenu]);
 
   const handleSave = () => {
@@ -205,31 +233,50 @@ export function WorkerCardView({
             <div 
                 ref={menuRef}
                 className={isMobile 
-                    ? "fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border-t border-gray-200 z-[9999] max-h-[70vh] flex flex-col animate-in slide-in-from-bottom duration-200"
-                    : "w-72 bg-white rounded-lg shadow-xl border border-gray-200 overflow-y-auto overscroll-contain"
+                    ? "fixed inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl ring-1 ring-black/5 z-[9999] max-h-[75vh] flex flex-col animate-in slide-in-from-bottom duration-200 overflow-hidden"
+                    : "w-72 bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col overflow-hidden max-h-[75vh]"
                 }
                 style={isMobile ? {} : menuStyle}
                 onClick={e => e.stopPropagation()}
                 onPointerDown={e => e.stopPropagation()}
                 onTouchStart={e => e.stopPropagation()}
+                onWheel={e => {
+                    const el = scrollRef.current;
+                    if (!el) return;
+                    if (el.scrollHeight <= el.clientHeight) return;
+                    e.preventDefault();
+                    el.scrollTop += e.deltaY;
+                }}
             >
                 {isMobile && (
-                    <div className="flex justify-center pt-3 pb-1" onClick={() => setShowMoveMenu(false)}>
+                    <div className="flex justify-center pt-3 pb-1">
                         <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
                     </div>
                 )}
-                <div className="p-4 text-sm font-bold text-gray-800 border-b bg-gray-50 flex justify-between items-center sticky top-0 z-10">
+                <div className="p-4 text-sm font-bold text-gray-800 border-b bg-gray-50 flex justify-between items-center">
                     <div className="flex flex-col">
                         <span className="text-xs text-gray-500 font-normal">نقل العامل:</span>
                         <span className="text-primary text-base">{worker.name}</span>
                     </div>
                     {isMobile && (
-                        <button onClick={() => setShowMoveMenu(false)} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors">
-                            <X className="w-4 h-4 text-gray-700" />
+                        <button onClick={() => setShowMoveMenu(false)} className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200">
+                            إغلاق
                         </button>
                     )}
                 </div>
-                <div className="overflow-y-auto overscroll-contain flex-1 p-2">
+                <div ref={scrollRef} className="flex-1 p-2 overflow-y-auto overscroll-contain scrollbar-hide">
+                    <div className="px-2 pb-2">
+                        <div className="relative">
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                value={destinationSearch}
+                                onChange={(e) => setDestinationSearch(e.target.value)}
+                                placeholder="ابحث عن مشروع..."
+                                className="w-full pr-9 pl-3 py-2 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                            />
+                        </div>
+                    </div>
                     <div className="text-xs font-bold text-gray-400 px-2 py-1 mb-1">اختر الوجهة:</div>
                     <button 
                         onClick={() => { onAssign(worker.id, null); setShowMoveMenu(false); }}
@@ -240,7 +287,7 @@ export function WorkerCardView({
                         </div>
                         <span className="font-bold">إلغاء التعيين (عودة للانتظار)</span>
                     </button>
-                    {sites.map(site => (
+                    {filteredSites.map(site => (
                     <button 
                         key={site.id}
                         onClick={() => { onAssign(worker.id, site.id); setShowMoveMenu(false); }}
@@ -253,10 +300,16 @@ export function WorkerCardView({
                         {site.id === siteId && <span className="text-[10px] bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full mr-auto">الحالي</span>}
                     </button>
                     ))}
-                    {sites.length === 0 && (
+                    {sites && sites.length === 0 && (
                         <div className="p-8 text-center text-gray-400 flex flex-col items-center gap-2">
                             <Briefcase className="w-8 h-8 opacity-20" />
                             <span className="text-sm">لا توجد مشاريع متاحة للنقل</span>
+                        </div>
+                    )}
+                    {sites && sites.length > 0 && filteredSites.length === 0 && (
+                        <div className="p-8 text-center text-gray-400 flex flex-col items-center gap-2">
+                            <Briefcase className="w-8 h-8 opacity-20" />
+                            <span className="text-sm">لا توجد مشاريع مطابقة لبحثك</span>
                         </div>
                     )}
                 </div>
@@ -316,6 +369,11 @@ export function WorkerCardView({
                                     {worker.name}
                                 </Link>
                             )}
+                            {isForeman && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                    فورمن
+                                </span>
+                            )}
                         </div>
                         {worker.englishName && (
                             <p 
@@ -324,6 +382,11 @@ export function WorkerCardView({
                             >
                                 {worker.englishName}
                             </p>
+                        )}
+                        {worker.availabilityStatus === 'absent' && (
+                            <span className="mt-1 inline-flex w-fit items-center px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
+                                غياب
+                            </span>
                         )}
                     </div>
                 ) : (
@@ -347,6 +410,11 @@ export function WorkerCardView({
                                 {worker.name}
                             </Link>
                         )}
+                        {isForeman && (
+                            <span className="inline-flex items-center mt-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300 w-fit">
+                                فورمن
+                            </span>
+                        )}
                         {worker.englishName && (
                             <p 
                                 className={`text-xs text-black font-medium leading-tight mt-0.5 ${isMobile ? 'text-right' : ''}`}
@@ -354,6 +422,11 @@ export function WorkerCardView({
                             >
                                 {worker.englishName}
                             </p>
+                        )}
+                        {worker.availabilityStatus === 'absent' && (
+                            <span className="mt-1 inline-flex w-fit items-center px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
+                                غياب
+                            </span>
                         )}
                     </div>
                 )}
@@ -405,7 +478,7 @@ export function WorkerCardView({
                             <Eye className={isMobile ? "w-5 h-5" : "w-3.5 h-3.5"} />
                         </button>
                     )}
-                    {onToggleEngineer && user?.role !== 'viewer' && user?.role !== 'engineer' && (
+                    {onToggleEngineer && user?.role !== 'viewer' && user?.role !== 'engineer' && user?.role !== 'accountant' && (
                         <button 
                             onClick={onToggleEngineer}
                             className={`${isMobile ? 'p-2' : 'p-1'} rounded ${worker.isEngineer ? 'text-indigo-600 hover:bg-indigo-50' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
@@ -414,7 +487,19 @@ export function WorkerCardView({
                             <HardHat className={isMobile ? "w-5 h-5" : "w-3.5 h-3.5"} />
                         </button>
                     )}
-                    {onUpdate && user?.role !== 'viewer' && user?.role !== 'engineer' && (
+                    {onToggleForeman && user?.role !== 'viewer' && user?.role !== 'engineer' && user?.role !== 'accountant' && (
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleForeman();
+                            }}
+                            className={`${isMobile ? 'p-2' : 'p-1'} rounded ${isForeman ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                            title={isForeman ? 'إلغاء تمييز فورمن' : 'تمييز كفورمن'}
+                        >
+                            <Crown className={isMobile ? "w-5 h-5" : "w-3.5 h-3.5"} />
+                        </button>
+                    )}
+                    {onUpdate && user?.role !== 'viewer' && user?.role !== 'engineer' && user?.role !== 'accountant' && (
                         <button 
                             onClick={() => {
                                 setEditName(worker.name);
@@ -426,7 +511,7 @@ export function WorkerCardView({
                             <Pencil className={isMobile ? "w-5 h-5" : "w-3.5 h-3.5"} />
                         </button>
                     )}
-                    {onDelete && user?.role !== 'viewer' && user?.role !== 'engineer' && (
+                    {onDelete && user?.role !== 'viewer' && user?.role !== 'engineer' && user?.role !== 'accountant' && (
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -447,6 +532,11 @@ export function WorkerCardView({
                     {worker.isEngineer && (
                       <span className="flex-shrink-0 text-[10px] px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 whitespace-nowrap border border-indigo-200 font-medium">
                         مهندس
+                      </span>
+                    )}
+                    {isForeman && (
+                      <span className="flex-shrink-0 text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap border border-amber-300 font-bold">
+                        فورمن
                       </span>
                     )}
                     

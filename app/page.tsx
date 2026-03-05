@@ -16,6 +16,12 @@ export default function Home() {
     }
   }, [user, isLoading, router]);
 
+  useEffect(() => {
+    if (!isLoading && user?.role === 'accountant') {
+      router.replace('/workers');
+    }
+  }, [user, isLoading, router]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -24,7 +30,7 @@ export default function Home() {
     );
   }
 
-  if (!user) return null;
+  if (!user || user.role === 'accountant') return null;
 
   return (
     <main className="min-h-screen">

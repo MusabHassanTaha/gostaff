@@ -64,18 +64,18 @@ body {
   animation: fadeIn 0.3s ease-in-out;
 }
 
-@keyframes doorOpen {
-  from { 
-    transform: scaleY(0); 
-    opacity: 0; 
+@media print {
+  @page {
+    margin: 5mm;
+    size: auto;
   }
-  to { 
-    transform: scaleY(1); 
-    opacity: 1; 
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    background: white;
   }
-}
-
-.animate-door-open {
-  animation: doorOpen 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  transform-origin: top;
+  /* Ensure all content is visible */
+  * {
+    overflow: visible !important;
+  }
 }

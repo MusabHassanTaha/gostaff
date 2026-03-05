@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import bcrypt from 'bcryptjs';
 import { useAppState } from './AppStateContext';
 import { AuthUserRecord } from '@/types';
+import { logActivity } from '@/lib/activity';
 
 interface AuthUser { 
   username: string; 
@@ -87,13 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         alert('حسابك قيد المراجعة من قبل المسؤول');
                         return false;
                     }
-                     const userData = { 
+                    const userData = { 
                         username, 
                         role: foundServer.role || (username === 'admin' ? 'admin' : 'viewer'),
                         assignedProjectIds: foundServer.assignedProjectIds || []
                     };
                     try { sessionStorage.setItem('labour-auth', JSON.stringify(userData)); } catch {}
                     setUser(userData);
+         logActivity('login', '/login', username);
                     return true;
                 }
             }
@@ -125,11 +127,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try { sessionStorage.setItem('labour-auth', JSON.stringify(userData)); } catch {}
     setUser(userData);
+    logActivity('login', '/login', username);
     return true;
   };
 
   const logout = () => {
     try { sessionStorage.removeItem('labour-auth'); } catch {}
+    if (user?.username) { logActivity('logout', typeof window !== 'undefined' ? window.location.pathname : '/', user.username); }
     setUser(null);
   };
 
@@ -154,7 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newState)
-    }).catch(err => console.error('Background sync failed:', err));
+    }).catch(() => {});
+    logActivity('add_user', '/users', record.username);
   };
 
   const updateUser = (username: string, patch: Partial<AuthUserRecord>) => {
@@ -178,7 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newState)
-    }).catch(err => console.error('Background sync failed:', err));
+    }).catch(() => {});
+    logActivity('update_user', '/users', username);
   };
 
   const deleteUser = (username: string) => {

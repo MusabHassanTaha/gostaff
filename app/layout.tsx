@@ -5,11 +5,13 @@ import { AppProvider } from "@/components/state/AppStateContext";
 import { AuthProvider } from "@/components/state/AuthContext";
 import AuthGate from "@/components/AuthGate";
 import TopUserBar from "@/components/TopUserBar";
+import ActivityTracker from "@/components/ActivityTracker";
 
-const cairo = Cairo({ 
+const cairo = Cairo({
   subsets: ["arabic", "latin"],
   weight: ["200", "300", "400", "500", "600", "700", "800", "900"],
   variable: "--font-cairo",
+  display: "swap",
 });
 
 export const viewport = {
@@ -48,6 +50,7 @@ export default function RootLayout({
         <AppProvider>
           <AuthProvider>
             <AuthGate>
+              <ActivityTracker />
               <TopUserBar />
               {children}
             </AuthGate>

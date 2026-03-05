@@ -19,6 +19,7 @@ export default function WorkersPage() {
   const isSupervisor = (user?.role as string) === 'supervisor';
   const isEngineer = (user?.role as string) === 'engineer';
   const isViewer = (user?.role as string) === 'viewer';
+  const isAccountant = (user?.role as string) === 'accountant';
   
   // Permission checks
   const canAdd = isAdmin || isSupervisor;
@@ -35,10 +36,14 @@ export default function WorkersPage() {
   } | null>(null);
 
   useEffect(() => {
+    if (isAccountant) {
+      setShowExpiryBanner(false);
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     const dismissed = typeof window !== 'undefined' ? localStorage.getItem('expiry-banner-dismissed-date') : null;
     setShowExpiryBanner(dismissed !== today);
-  }, []);
+  }, [isAccountant]);
 
   useEffect(() => {
     const query = searchParams.get('search');
@@ -146,6 +151,7 @@ export default function WorkersPage() {
         iqama: { green: 0, yellow: 0, red: 0 },
         insurance: { green: 0, yellow: 0, red: 0 }
     };
+    if (isAccountant) return s;
     accessibleWorkers.forEach(w => {
         const dIqama = daysRemaining(w.iqamaExpiry);
         if (dIqama !== undefined) {
@@ -162,10 +168,10 @@ export default function WorkersPage() {
         }
     });
     return s;
-  }, [accessibleWorkers]);
+  }, [accessibleWorkers, isAccountant]);
 
   const hasIssues = stats.iqama.yellow > 0 || stats.iqama.red > 0 || stats.insurance.yellow > 0 || stats.insurance.red > 0;
-  const showWarning = showExpiryBanner && hasIssues;
+  const showWarning = showExpiryBanner && hasIssues && !isAccountant;
 
   // Added state for skills management
   const [isManagingSkills, setIsManagingSkills] = useState(false);
@@ -202,13 +208,15 @@ export default function WorkersPage() {
   }, [state.workers, isAdmin]);
 
   const workers = useMemo(() => {
-    return accessibleWorkers.filter(w => {
+    const filtered = accessibleWorkers.filter(w => {
         const searchLower = search.toLowerCase();
         const skillLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
         const assignedSite = workerSiteMap.get(w.id) || state.sites.find(s => s.id === w.assignedSiteId);
         
         const matchSearch = 
             w.name.toLowerCase().includes(searchLower) ||
+            (w.englishName && w.englishName.toLowerCase().includes(searchLower)) ||
+            (w.code && w.code.toLowerCase().includes(searchLower)) ||
             (w.iqamaNumber && w.iqamaNumber.includes(searchLower)) ||
             (w.phone && w.phone.includes(searchLower)) ||
             (w.nationality && w.nationality.toLowerCase().includes(searchLower)) ||
@@ -218,6 +226,12 @@ export default function WorkersPage() {
         const matchSkill = filterSkill ? w.skill === filterSkill : true;
         return matchSearch && matchSkill;
     });
+    const parseCodeNum = (code?: string) => {
+        if (!code) return 0;
+        const n = parseInt(code.replace(/\D/g, ''), 10);
+        return isNaN(n) ? 0 : n;
+    };
+    return filtered.sort((a, b) => parseCodeNum(b.code) - parseCodeNum(a.code));
   }, [accessibleWorkers, search, filterSkill, state.skills, workerSiteMap, state.sites]);
 
   const handleAdd = (e: React.FormEvent) => {
@@ -245,15 +259,27 @@ export default function WorkersPage() {
       }
     }
 
-    // Generate Code
-    let maxCode = 0;
-    state.workers.forEach(w => {
-        if (w.code) {
-            const num = parseInt(w.code.replace('EM', ''), 10);
-            if (!isNaN(num) && num > maxCode) maxCode = num;
-        }
-    });
-    const newCode = `EM${(maxCode + 1).toString().padStart(4, '0')}`;
+    // Generate Code using persisted lastWorkerCode (prevents reuse after deletions)
+    let base = state.lastWorkerCode;
+    if (!base || isNaN(base)) {
+        base = state.workers.reduce((m, w) => {
+            const n = parseInt(String(w.code || '').replace(/\D/g, ''), 10);
+            return !isNaN(n) && n > m ? n : m;
+        }, 0);
+    }
+
+    const usedCodes = new Set(
+      state.workers
+        .map(w => w.code)
+        .filter((c): c is string => Boolean(c))
+    );
+
+    let nextCodeNum = base || 0;
+    let newCode: string;
+    do {
+      nextCodeNum += 1;
+      newCode = `EM${nextCodeNum.toString().padStart(4, '0')}`;
+    } while (usedCodes.has(newCode));
 
     const newWorker: Worker = {
       id: `w-${Date.now()}`,
@@ -290,6 +316,7 @@ export default function WorkersPage() {
       workers: [newWorker, ...prev.workers],
       availableWorkerIds: [newWorker.id, ...prev.availableWorkerIds],
       notifications: [newNotification, ...(prev.notifications || [])] as Notification[],
+      lastWorkerCode: nextCodeNum
     }));
     setForm({
       name: '',
@@ -825,7 +852,7 @@ export default function WorkersPage() {
             <div className="relative w-full md:flex-1">
                 <input 
                     type="text" 
-                    placeholder="بحث سريع (الاسم، الكود، الإقامة)..." 
+                    placeholder="بحث سريع (الاسم العربي/الإنجليزي، الكود، رقم الإقامة، المهنة، الجنسية)..." 
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm pl-10 text-sm"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -972,22 +999,22 @@ export default function WorkersPage() {
             <table className="w-full text-right border-collapse min-w-full">
               <thead className="bg-gray-50/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-200 shadow-sm print:static print:bg-gray-100 print:shadow-none">
                 <tr>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12 text-center print:text-black print:border-b-2 print:border-gray-300">#</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-24 print:text-black print:border-b-2 print:border-gray-300">الكود</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px] print:text-black print:border-b-2 print:border-gray-300">الاسم</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28 text-center print:hidden">الحالة</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">المهنة</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">الجنسية</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">رقم الإقامة</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">الجوال</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border-b-2 print:border-gray-300">الإقامة</th>
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border-b-2 print:border-gray-300">التأمين</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-12 text-center print:text-black print:border print:border-gray-300">#</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-24 print:text-black print:border print:border-gray-300">الكود</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px] print:text-black print:border print:border-gray-300">الاسم</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap w-28 text-center print:text-black print:border print:border-gray-300">تاريخ التعيين</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border print:border-gray-300">المهنة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border print:border-gray-300">الجنسية</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border print:border-gray-300">رقم الإقامة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border print:border-gray-300">الجوال</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border print:border-gray-300">الإقامة</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center print:text-black print:border print:border-gray-300">التأمين</th>
                   {canViewSalary && (
                     <>
-                        <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border-b-2 print:border-gray-300">البنك</th>
+                        <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap print:text-black print:border print:border-gray-300">البنك</th>
                     </>
                   )}
-                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px] print:text-black print:border-b-2 print:border-gray-300">الموقع الحالي</th>
+                  <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px] print:text-black print:border print:border-gray-300">الموقع الحالي</th>
                   {(canEdit || canDelete) && (
                       <th className="px-4 py-4 text-xs font-bold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center sticky left-0 bg-gray-50 shadow-sm z-30 w-24 print:hidden">إجراءات</th>
                   )}
@@ -1002,33 +1029,41 @@ export default function WorkersPage() {
 
                   return (
                     <tr key={w.id} className="hover:bg-blue-50/40 transition-colors group">
-                      <td className="px-4 py-3 text-sm text-gray-500 font-medium text-center">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 font-semibold font-mono">{w.code || '-'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-sm text-gray-500 font-medium text-center print:border print:border-gray-300">{idx + 1}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-semibold font-mono print:border print:border-gray-300">{w.code || '-'}</td>
+                      <td className="px-4 py-3 print:border print:border-gray-300">
                         <div className="flex flex-col max-w-[200px]">
                             <span className="text-sm font-bold text-gray-900 truncate print:whitespace-normal print:overflow-visible" title={w.name}>{w.name}</span>
-                            {w.englishName && <span className="text-[10px] text-gray-500 mt-0.5 truncate uppercase font-medium print:whitespace-normal print:overflow-visible" title={w.englishName}>{w.englishName}</span>}
+                            {w.englishName && <span className="text-[10px] text-black mt-0.5 truncate uppercase font-bold print:whitespace-normal print:overflow-visible print:text-right w-full block" dir="ltr" title={w.englishName}>{w.englishName}</span>}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center print:hidden">
-                        <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-bold w-20 ${
-                            w.status === 'active' || !w.status 
-                            ? 'bg-green-100 text-green-700 border border-green-200' 
-                            : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                        }`}>
-                            {w.status === 'active' || !w.status ? 'نشط' : 'قيد المراجعة'}
-                        </span>
+                      <td className="px-4 py-3 text-center print:text-black print:border print:border-gray-300">
+                        {w.hireDate ? (
+                            (() => {
+                                const daysWorked = calculateDaysWorked(w.hireDate);
+                                const isNew = daysWorked !== undefined && daysWorked < 30;
+                                const colorClass = isNew ? 'text-red-600' : 'text-green-600';
+                                return (
+                                    <div className="flex flex-col items-center justify-center">
+                                         <span className={`text-xs font-bold ${colorClass} print:text-black`}>{w.hireDate}</span>
+                                         <span className={`text-[10px] font-bold mt-0.5 ${colorClass} print:text-black`}>منذ {daysWorked} يوم</span>
+                                     </div>
+                                );
+                            })()
+                        ) : (
+                            <span className="text-gray-400">-</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 print:border print:border-gray-300">
                         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 whitespace-nowrap">
                             {skillLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{w.nationality || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap">{w.iqamaNumber || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap" dir="ltr">{w.phone || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap print:border print:border-gray-300">{w.nationality || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap print:border print:border-gray-300">{w.iqamaNumber || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-mono whitespace-nowrap print:border print:border-gray-300" dir="ltr">{w.phone || '-'}</td>
                       
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center print:border print:border-gray-300">
                         {w.iqamaExpiry ? (
                             <div className="flex flex-col items-center">
                                 <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${statusClasses(daysIqama)}`}>
@@ -1058,7 +1093,7 @@ export default function WorkersPage() {
                             </td>
                         </>
                       )}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 print:border print:border-gray-300">
                          {assignedSite ? (
                              <Link href={`/?search=${encodeURIComponent(assignedSite.name)}`} className="group/site flex items-center gap-1.5 max-w-[160px]">
                                  <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover/site:bg-blue-600 group-hover/site:text-white transition-colors shrink-0">

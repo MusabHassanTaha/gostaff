@@ -371,7 +371,7 @@ export default function ProfessionalDashboard() {
 
                 if (include) {
                     absences.push({
-                        workerName: w.name,
+                        workerName: w.englishName ? `${w.name} - ${w.englishName}` : w.name,
                         workerId: w.id,
                         date: h.date,
                         dayName: d.toLocaleDateString('ar-EG', { weekday: 'long' })

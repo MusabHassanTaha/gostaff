@@ -34,6 +34,7 @@ export interface Worker {
   driverCarPlate?: string;
   driverCarType?: string;
   driverCapacity?: number;
+  driverLicenseImage?: string; // URL to the driver license image/pdf
   
   // New Status Management Fields
   absenceHistory?: Array<{
@@ -85,11 +86,13 @@ export interface Driver {
 
 export interface Site {
   id: string;
+  code?: string; // Project code
   name: string;
   location: string;
   requiredSkills: Record<string, number>;
   assignedWorkerIds: string[];
   engineerId?: string;
+  foremanId?: string;
   driverId?: string;
   driverTransportCount?: number;
   assignedDrivers?: { driverId: string; count: number }[];
@@ -102,7 +105,7 @@ export interface AuthUserRecord {
   password: string;
   email?: string;
   status?: 'active' | 'pending';
-  role?: 'admin' | 'engineer' | 'supervisor' | 'viewer'; // User role
+  role?: 'admin' | 'engineer' | 'supervisor' | 'viewer' | 'accountant'; // User role
   assignedProjectIds?: string[];
 }
 
@@ -113,6 +116,28 @@ export interface Notification {
   message: string;
   isRead: boolean;
   createdAt: number;
+}
+
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  action: string;
+  route: string;
+  timestamp: number;
+}
+
+export type DocumentCategory = string;
+
+export type DocumentType = 'pdf' | 'image' | 'other';
+
+export interface CompanyDocument {
+  id: string;
+  name: string;
+  category: DocumentCategory;
+  type: DocumentType;
+  url: string;
+  uploadedAt: string;
+  originalName?: string;
 }
 
 export interface AppState {
@@ -126,6 +151,10 @@ export interface AppState {
   attendanceHistory?: DailyAttendance[];
   notifications: Notification[];
   salaryData?: Record<string, SalaryRecord>;
+  activityLogs?: ActivityLog[];
+  lastWorkerCode?: number;
+  documents?: CompanyDocument[];
+  documentCategories?: string[];
 }
 
 export interface DailyAttendance {
@@ -161,12 +190,18 @@ export interface ViolationRecord {
 
 export interface Vehicle {
   id: string;
+  code?: string; // Vehicle code
   plateNumber: string;
   type: string; // e.g., Sedan, Bus
   model?: string;
   year?: string;
   registrationImage?: string; // URL to the registration image
+  insuranceImage?: string; // URL to the insurance image/pdf
   registrationExpiry?: string; // ISO date (YYYY-MM-DD)
+  periodicInspectionExpiry?: string; // ISO date (YYYY-MM-DD)
+  insuranceExpiry?: string; // ISO date (YYYY-MM-DD)
+  oilChangeCurrentDate?: string; // ISO date (YYYY-MM-DD)
+  oilChangeNextDate?: string; // ISO date (YYYY-MM-DD)
   maintenanceHistory: MaintenanceRecord[];
   violations: ViolationRecord[];
 }

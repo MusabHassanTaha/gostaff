@@ -1,4 +1,4 @@
-import { AppState, Worker, Site, SkillDefinition, Driver, AuthUserRecord, Vehicle } from '@/types';
+import { AppState, Worker, Site, SkillDefinition, Driver, AuthUserRecord, Vehicle, CompanyDocument, DocumentCategory } from '@/types';
 
 export const initialSkills: SkillDefinition[] = [
   {
@@ -2790,9 +2790,27 @@ export const initialVehicles: Vehicle[] = [
   }
 ];
 
+const initialLastWorkerCode = Math.max(
+  0,
+  ...initialWorkers.map(w => {
+    const n = parseInt(String(w.code || '').replace(/\D/g, ''), 10);
+    return isNaN(n) ? 0 : n;
+  })
+);
+
+export const initialDocuments: CompanyDocument[] = [];
+
+export const initialDocumentCategories: DocumentCategory[] = [
+  'شهادات حكومية',
+  'أوراق التأسيس',
+  'عقود',
+  'أخرى'
+];
+
 export const initialAppState: AppState = {
   workers: initialWorkers,
   sites: initialSites,
+  lastWorkerCode: initialLastWorkerCode,
   availableWorkerIds: [
   "w-1769885746774",
   "w-1769884485044",
@@ -2932,5 +2950,8 @@ export const initialAppState: AppState = {
   vehicles: initialVehicles,
   attendanceHistory: [],
   notifications: [],
-  salaryData: {}
+  salaryData: {},
+  activityLogs: [],
+  documents: initialDocuments,
+  documentCategories: initialDocumentCategories
 };

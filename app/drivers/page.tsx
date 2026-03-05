@@ -1,12 +1,12 @@
  'use client';
- import React, { useMemo, useState, useEffect } from 'react';
+ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAppState } from '@/components/state/AppStateContext';
 import { useAuth } from '@/components/state/AuthContext';
 import { Worker } from '@/types';
 import SearchableSelect from '@/components/SearchableSelect';
-import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car, Activity } from 'lucide-react';
+import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car, Activity, Upload, Download, Eye, FileText } from 'lucide-react';
  
  export default function DriversPage() {
   const { state: globalState, setState } = useAppState();
@@ -33,7 +33,13 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const drivers = state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق');
+  const drivers = state.workers.filter(w => 
+    w.skill === 'Driver' ||
+    w.skill === 'سائق' ||
+    !!w.driverCarPlate ||
+    !!w.driverCarType ||
+    typeof w.driverCapacity === 'number'
+  );
 
   const [search, setSearch] = useState('');
 
@@ -110,9 +116,9 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
     setSelectedWorkerId(w.id);
     setNewName(w.name);
     setNewPhone(w.phone || '');
-    setNewPlate(''); // Keep empty for new driver details
+    setNewPlate('');
     setNewType('');
-    setSearchWorker(''); // Clear search
+    setSearchWorker('');
     setShowSuggestions(false);
   };
   const [newName, setNewName] = useState('');
@@ -128,24 +134,133 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
   const [editCapacity, setEditCapacity] = useState<number | ''>('');
   const [editAssignments, setEditAssignments] = useState<{ siteId: string; count: number }[]>([]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDriverId, setUploadingDriverId] = useState<string | null>(null);
+
+  const [viewingLicense, setViewingLicense] = useState<string | null>(null);
+
+  const LicenseModal = () => {
+    if (!viewingLicense) return null;
+
+    const isPdf = viewingLicense.toLowerCase().endsWith('.pdf');
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setViewingLicense(null)}>
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 border-b">
+            <h3 className="text-lg font-bold text-gray-900">عرض الرخصة</h3>
+            <button 
+              onClick={() => setViewingLicense(null)}
+              className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto p-4 bg-gray-50 flex items-center justify-center">
+            {isPdf ? (
+              <iframe 
+                src={viewingLicense} 
+                className="w-full h-full min-h-[60vh] rounded-lg border"
+                title="License PDF"
+              />
+            ) : (
+              <img 
+                src={viewingLicense} 
+                alt="License" 
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
+              />
+            )}
+          </div>
+          <div className="p-4 border-t bg-gray-50 flex justify-end">
+            <a 
+              href={viewingLicense} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>تحميل / فتح في نافذة جديدة</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const triggerUpload = (driverId: string) => {
+    setUploadingDriverId(driverId);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingDriverId) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+
+      const data = await res.json();
+      const fileUrl = data.url;
+
+      setState(prev => ({
+        ...prev,
+        workers: prev.workers.map(w => 
+          w.id === uploadingDriverId 
+            ? { ...w, driverLicenseImage: fileUrl } 
+            : w
+        )
+      }));
+
+    } catch (error) {
+      console.error('Error uploading license:', error);
+      alert('حدث خطأ أثناء رفع الملف');
+    } finally {
+      setUploadingDriverId(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const deleteLicense = (driverId: string) => {
+    if (user?.role === 'viewer') return;
+    if (!confirm('هل أنت متأكد من حذف رخصة القيادة المرفقة؟')) return;
+
+    setState(prev => ({
+      ...prev,
+      workers: prev.workers.map(w => 
+        w.id === driverId 
+          ? { ...w, driverLicenseImage: undefined } 
+          : w
+      )
+    }));
+  };
+
   const handleAdd = (e: React.FormEvent) => {
      e.preventDefault();
      if (user?.role === 'viewer') return;
      if (!newName.trim()) return;
 
-     if (selectedWorkerId) {
+    if (selectedWorkerId) {
         setState(prev => ({
             ...prev,
             workers: prev.workers.map(w => w.id === selectedWorkerId ? {
                 ...w,
-                skill: 'سائق',
-                phone: newPhone,
+                phone: newPhone || w.phone,
                 driverCarPlate: newPlate,
                 driverCarType: newType,
                 driverCapacity: Number(newCapacity) || 0,
             } : w)
         }));
-     } else {
+    } else {
         const newDriver: Worker = {
           id: `w-${Date.now()}`,
           name: newName,
@@ -270,6 +385,13 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
 
   return (
     <main className="min-h-screen bg-gray-50 font-cairo animate-fade-in">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        className="hidden" 
+        accept="image/*,.pdf"
+      />
       <div className="w-full max-w-[1920px] mx-auto px-4 py-8 md:p-10">
          <div className="relative flex flex-col md:flex-row items-center justify-center mb-8 gap-4">
            <h1 className="text-3xl font-bold text-gray-900 md:absolute md:right-0">إدارة السائقين</h1>
@@ -384,8 +506,11 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
                       onClick={() => selectWorker(w)}
                       className="w-full text-right px-4 py-2 hover:bg-gray-50 flex justify-between items-center border-b last:border-0"
                     >
-                      <span className="font-bold">{w.name}</span>
-                      <span className="text-xs text-gray-500 font-bold">{w.phone}</span>
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className="font-bold">{w.name}</span>
+                        {w.skill && <span className="text-[11px] text-gray-500 font-semibold">{w.skill}</span>}
+                      </div>
+                      <span className="text-xs text-gray-500 font-mono font-bold">{w.phone}</span>
                     </button>
                   ))}
                 </div>
@@ -578,6 +703,39 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
                    </div>
                    {user?.role !== 'viewer' && (
                      <div className="flex gap-1">
+                        {d.driverLicenseImage ? (
+                          <>
+                            <button 
+                              onClick={() => setViewingLicense(d.driverLicenseImage || null)}
+                              className="p-2 text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100"
+                              title="عرض الرخصة"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => triggerUpload(d.id)}
+                              className="p-2 text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100"
+                              title="تحديث الرخصة"
+                            >
+                              <Upload className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => deleteLicense(d.id)}
+                              className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100"
+                              title="حذف الرخصة"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            onClick={() => triggerUpload(d.id)}
+                            className="p-2 text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100"
+                            title="رفع الرخصة"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        )}
                         <button onClick={() => startEdit(d)} className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -800,7 +958,40 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
                         </td>
                         <td className="px-6 py-5 align-middle whitespace-nowrap">
                           {user?.role !== 'viewer' && (
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
+                              {d.driverLicenseImage ? (
+                                <div className="flex gap-1">
+                                  <button 
+                                    onClick={() => setViewingLicense(d.driverLicenseImage || null)}
+                                    className="px-3 py-1.5 text-sm font-bold border border-purple-200 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 transition-colors shadow-sm flex items-center gap-1"
+                                    title="عرض الرخصة"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => triggerUpload(d.id)}
+                                    className="px-3 py-1.5 text-sm font-bold border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 transition-colors shadow-sm"
+                                    title="تحديث الرخصة"
+                                  >
+                                    <Upload className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteLicense(d.id)}
+                                    className="px-3 py-1.5 text-sm font-bold border border-red-200 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 transition-colors shadow-sm"
+                                    title="حذف الرخصة"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button 
+                                  onClick={() => triggerUpload(d.id)}
+                                  className="px-3 py-1.5 text-sm font-bold border border-orange-200 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition-colors shadow-sm flex items-center gap-1"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>رفع الرخصة</span>
+                                </button>
+                              )}
                               <button onClick={() => startEdit(d)} className="px-3 py-1.5 text-sm font-bold border border-gray-300 rounded-lg bg-white hover:bg-gray-50 text-gray-700 transition-colors shadow-sm">توزيع / تعديل</button>
                               <button onClick={() => handleDelete(d.id)} className="px-3 py-1.5 text-sm font-bold border border-red-200 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 transition-colors shadow-sm">حذف</button>
                             </div>
@@ -816,7 +1007,8 @@ import { Search, X, Edit2, Trash2, Phone, Truck, Users, Plus, CheckCircle2, Car,
               </tbody>
             </table>
          </div>
-       </div>
-     </main>
-   );
- }
+      </div>
+      <LicenseModal />
+    </main>
+  );
+}

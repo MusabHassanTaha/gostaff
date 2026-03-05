@@ -4,16 +4,18 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppState } from '@/components/state/AppStateContext';
 import { useAuth } from '@/components/state/AuthContext';
+import { Vehicle, ViolationRecord } from '@/types';
 import { daysRemaining, statusClasses, labelFor, calculateDaysWorked } from '@/lib/date';
 import { utils, writeFile } from 'xlsx';
-import { Search, Calendar, Download, Printer, Users, UserCheck, UserX, FileText, LayoutDashboard, Truck, Car, AlertTriangle, Coffee, Pencil, Activity, Wallet } from 'lucide-react';
-import SalaryReport from './SalaryReport';
+import { Search, Calendar, Download, Printer, Users, UserCheck, UserX, FileText, LayoutDashboard, Truck, Car, AlertTriangle, Coffee, Pencil, Activity, ShieldCheck, Wrench, X, Filter, User } from 'lucide-react';
+import SearchableSelect from '@/components/SearchableSelect';
 
 function ReportsContent() {
   const { user } = useAuth();
   const { state: globalState, setState, cancelAbsence, updateAbsence, deleteAbsence } = useAppState();
   
   const isEngineer = user?.role === 'engineer';
+   const isAccountant = user?.role === 'accountant';
 
   const state = useMemo(() => {
     // Global Filter: Exclude Archived Projects
@@ -65,9 +67,104 @@ function ReportsContent() {
   }, [globalState, isEngineer, user]);
 
   const searchParams = useSearchParams();
-  const initialView = 'projects';
-  const [view, setView] = useState<'projects' | 'leave' | 'all' | 'projects_summary' | 'drivers' | 'vehicles' | 'violations' | 'absence' | 'salaries'>('projects');
+  const initialView = (searchParams.get('view') as any) || 'projects';
+  const [view, setView] = useState<'projects' | 'leave' | 'all' | 'projects_summary' | 'drivers' | 'vehicles' | 'vehicle_movement' | 'violations' | 'maintenance' | 'absence' | 'salaries' | 'iqama_status' | 'insurance_status'>(initialView);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  // Violation Search State (Transferred from Vehicles)
+  const [violationSearchQuery, setViolationSearchQuery] = useState('');
+  const [violationSearchDriver, setViolationSearchDriver] = useState('');
+  const [violationSearchVehicle, setViolationSearchVehicle] = useState('');
+  const [violationSearchStartDate, setViolationSearchStartDate] = useState('');
+  const [violationSearchEndDate, setViolationSearchEndDate] = useState('');
+
+  // Project Report Date Filter
+  const [projectSearchStartDate, setProjectSearchStartDate] = useState('');
+  const [projectSearchEndDate, setProjectSearchEndDate] = useState('');
+
+  // Vehicle Movement Date Filter
+  const [vehicleMovementStartDate, setVehicleMovementStartDate] = useState('');
+  const [vehicleMovementEndDate, setVehicleMovementEndDate] = useState('');
+
+  // Driver Report Date Filter
+  const [driverSearchStartDate, setDriverSearchStartDate] = useState('');
+  const [driverSearchEndDate, setDriverSearchEndDate] = useState('');
+
+  // Vehicle Report Date Filter
+  const [vehicleSearchStartDate, setVehicleSearchStartDate] = useState('');
+  const [vehicleSearchEndDate, setVehicleSearchEndDate] = useState('');
+
+  // Worker Search State
+  const [workerSearchQuery, setWorkerSearchQuery] = useState('');
+
+  const violationSearchResults = useMemo(() => {
+    const query = violationSearchQuery.toLowerCase();
+    const results: { vehicle: any; violation: any }[] = [];
+
+    (state.vehicles || []).forEach(vehicle => {
+      // If vehicle filter is active and doesn't match, skip this vehicle entirely
+      if (violationSearchVehicle && vehicle.id !== violationSearchVehicle) return;
+
+      vehicle.violations.forEach(violation => {
+        // Driver Filter
+        if (violationSearchDriver && violation.driverId !== violationSearchDriver) return;
+
+        // Date Range Filter
+        if (violationSearchStartDate && violation.date < violationSearchStartDate) return;
+        if (violationSearchEndDate && violation.date > violationSearchEndDate) return;
+
+        // Text Search Filter
+        if (query) {
+           const matchDriver = violation.driverName?.toLowerCase().includes(query);
+           const matchPlate = vehicle.plateNumber.toLowerCase().includes(query);
+           const matchViolationNumber = violation.violationNumber?.toLowerCase().includes(query);
+           const matchDesc = violation.description?.toLowerCase().includes(query);
+           
+           if (!matchDriver && !matchPlate && !matchViolationNumber && !matchDesc) return;
+        }
+        
+        results.push({ vehicle, violation });
+      });
+    });
+
+    return results;
+  }, [state.vehicles, violationSearchQuery, violationSearchDriver, violationSearchVehicle, violationSearchStartDate, violationSearchEndDate]);
+
+
+  // Date Filters for Maintenance Report
+  const [maintenanceStartDate, setMaintenanceStartDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  });
+  const [maintenanceEndDate, setMaintenanceEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const vehicleOptions = useMemo(() => {
+    return (state.vehicles || []).map(v => ({
+      value: v.id,
+      label: `${v.type} - ${v.plateNumber}`
+    }));
+  }, [state.vehicles]);
+
+  const workerOptions = useMemo(() => {
+    return state.workers.map(w => ({
+      value: w.id,
+      label: w.name
+    }));
+  }, [state.workers]);
+
+  const filteredWorkers = useMemo(() => {
+    const query = workerSearchQuery.toLowerCase();
+    if (!query) return state.workers;
+    
+    return state.workers.filter(w => 
+      (w.name && w.name.toLowerCase().includes(query)) ||
+      (w.englishName && w.englishName.toLowerCase().includes(query)) ||
+      (w.nationality && w.nationality.toLowerCase().includes(query)) ||
+      (w.code && w.code.toLowerCase().includes(query)) ||
+      (w.iqamaNumber && w.iqamaNumber.includes(query)) ||
+      (w.phone && w.phone.includes(query))
+    );
+  }, [state.workers, workerSearchQuery]);
 
   useEffect(() => {
     const v = searchParams.get('view');
@@ -80,34 +177,73 @@ function ReportsContent() {
     }
   }, [searchParams]);
 
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  useEffect(() => {
+    if (isAccountant && view !== 'absence' && view !== 'violations') {
+      setView('absence');
+    }
+  }, [isAccountant, view]);
 
-  // Violations Report State
-  const [violationSearch, setViolationSearch] = useState('');
-  const [violationSearchType, setViolationSearchType] = useState<'plate' | 'driver'>('plate');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [iqamaStatusFilter, setIqamaStatusFilter] = useState<'all' | 'valid' | 'soon' | 'expired'>('all');
+  const [insuranceStatusFilter, setInsuranceStatusFilter] = useState<'all' | 'valid' | 'soon' | 'expired'>('all');
+  const iqamaFiltered = useMemo(() => {
+    const arr = state.workers.filter(w => w.status !== 'pending' && w.iqamaExpiry);
+    if (iqamaStatusFilter === 'all') return arr;
+    return arr.filter(w => {
+      const d = daysRemaining(w.iqamaExpiry);
+      const cls = d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : (d !== undefined ? 'valid' : 'none'));
+      return cls === iqamaStatusFilter;
+    });
+  }, [state.workers, iqamaStatusFilter]);
+  const insuranceFiltered = useMemo(() => {
+    const arr = state.workers.filter(w => w.status !== 'pending' && w.insuranceExpiry);
+    if (insuranceStatusFilter === 'all') return arr;
+    return arr.filter(w => {
+      const d = daysRemaining(w.insuranceExpiry);
+      const cls = d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : (d !== undefined ? 'valid' : 'none'));
+      return cls === insuranceStatusFilter;
+    });
+  }, [state.workers, insuranceStatusFilter]);
+
+  // Violations Report State removed
+
 
   const [editingAbsence, setEditingAbsence] = useState<{ workerId: string; oldDate: string; newDate: string; reason: string } | null>(null);
 
   const handleDeleteAbsence = (workerId: string) => {
+      if (isAccountant) return;
       if (confirm('هل أنت متأكد من حذف هذا الغياب؟ سيتم إعادة العامل إلى حالته السابقة.')) {
           cancelAbsence(workerId);
       }
   };
 
   const handleDeleteHistoryItem = (workerId: string, date: string) => {
+      if (isAccountant) return;
       if (confirm('هل أنت متأكد من حذف هذا السجل؟')) {
           deleteAbsence(workerId, date);
       }
   };
 
   const handleSaveAbsence = () => {
+      if (isAccountant) return;
       if (!editingAbsence) return;
       updateAbsence(editingAbsence.workerId, editingAbsence.oldDate, editingAbsence.newDate, editingAbsence.reason);
       setEditingAbsence(null);
   };
 
   useEffect(() => {
-    const reportName = view === 'projects' ? 'تقرير_توزيع_المشاريع' : view === 'leave' ? 'تقرير_الإجازات' : view === 'projects_summary' ? 'تقرير_المشاريع_المبسط' : view === 'drivers' ? 'تقرير_السائقين' : view === 'vehicles' ? 'تقرير_المركبات' : view === 'violations' ? 'تقرير_المخالفات' : view === 'absence' ? 'تقرير_الغياب' : view === 'salaries' ? 'تقرير_الرواتب' : 'قاعدة_بيانات_العمال_الكل';
+    const reportName = view === 'projects' ? 'تقرير_توزيع_المشاريع'
+      : view === 'leave' ? 'تقرير_الإجازات'
+      : view === 'projects_summary' ? 'تقرير_المشاريع_المبسط'
+      : view === 'drivers' ? 'تقرير_السائقين'
+      : view === 'vehicles' ? 'تقرير_المركبات'
+      : view === 'vehicle_movement' ? 'تقرير_حركة_المركبات'
+      : view === 'violations' ? 'تقرير_المخالفات_المرورية'
+      : view === 'maintenance' ? 'تقرير_الصيانة'
+      : view === 'absence' ? 'تقرير_الغياب'
+      : view === 'iqama_status' ? 'تقرير_الإقامة'
+      : view === 'insurance_status' ? 'تقرير_التأمين'
+      : 'قاعدة_بيانات_العمال_الكل';
     document.title = `${reportName}_${selectedDate}`;
     return () => {
         document.title = 'Labour App';
@@ -142,31 +278,76 @@ function ReportsContent() {
 
   const data = useMemo(() => {
     // Filter out pending workers from reports
-    const activeWorkers = state.workers.filter(w => w.status !== 'pending');
+    let activeWorkers = state.workers.filter(w => w.status !== 'pending');
     
+    // Base list of valid workers (for engineer/driver lookup independent of date filter)
+    const allActiveWorkers = [...activeWorkers];
+
+    // Apply Date Range Filter for Projects View (Filtering by Hire Date)
+    if (view === 'projects' && (projectSearchStartDate || projectSearchEndDate)) {
+        activeWorkers = activeWorkers.filter(w => {
+            if (!w.hireDate) return false;
+            if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
+            if (projectSearchEndDate && w.hireDate > projectSearchEndDate) return false;
+            return true;
+        });
+    }
+
     return state.sites.map(site => {
       const workers = activeWorkers.filter(w => w.assignedSiteId === site.id);
       const counts: Record<string, number> = {};
       state.skills.forEach(sk => { counts[sk.name] = 0; });
       workers.forEach(w => { counts[w.skill] = (counts[w.skill] || 0) + 1; });
-      const driver = activeWorkers.find(w => w.id === site.driverId);
-      const engineer = activeWorkers.find(w => w.id === site.engineerId);
+      const driver = allActiveWorkers.find(w => w.id === site.driverId);
+      const engineer = allActiveWorkers.find(w => w.id === site.engineerId);
       return { site, workers, counts, driver, engineer };
     });
-  }, [state.sites, state.workers, state.skills]);
+  }, [state.sites, state.workers, state.skills, view, projectSearchStartDate, projectSearchEndDate]);
 
   const realLeaveData = useMemo(() => {
     const activeWorkers = state.workers.filter(w => w.status !== 'pending');
     return activeWorkers.filter(w => !w.assignedSiteId && w.availabilityStatus === 'rest');
   }, [state.workers]);
 
+  // Iqama & Insurance Stats (for printing and screen)
+  const iqInsStats = useMemo(() => {
+    const stats = {
+      iqama: { valid: 0, soon: 0, expired: 0, unregistered: 0 },
+      insurance: { valid: 0, soon: 0, expired: 0, unregistered: 0 },
+      total: 0
+    };
+    const activeWorkers = filteredWorkers.filter(w => w.status !== 'pending');
+    stats.total = activeWorkers.length;
+    activeWorkers.forEach(w => {
+      // Iqama
+      if (!w.iqamaExpiry) {
+        stats.iqama.unregistered++;
+      } else {
+        const d = daysRemaining(w.iqamaExpiry);
+        if (d === 0) stats.iqama.expired++;
+        else if (d && d <= 10) stats.iqama.soon++;
+        else stats.iqama.valid++;
+      }
+      // Insurance
+      if (!w.insuranceExpiry) {
+        stats.insurance.unregistered++;
+      } else {
+        const d = daysRemaining(w.insuranceExpiry);
+        if (d === 0) stats.insurance.expired++;
+        else if (d && d <= 10) stats.insurance.soon++;
+        else stats.insurance.valid++;
+      }
+    });
+    return stats;
+  }, [filteredWorkers]);
+
   const stats = useMemo(() => {
-    const activeWorkers = state.workers.filter(w => w.status !== 'pending');
+    const activeWorkers = filteredWorkers.filter(w => w.status !== 'pending');
     const total = activeWorkers.length;
     const assigned = activeWorkers.filter(w => w.assignedSiteId).length;
     const leave = activeWorkers.filter(w => !w.assignedSiteId && w.availabilityStatus === 'rest').length;
     return { total, assigned, leave };
-  }, [state.workers]);
+  }, [filteredWorkers]);
 
   const projectStats = useMemo(() => {
     const totalProjects = state.sites.length;
@@ -177,10 +358,22 @@ function ReportsContent() {
     
     // Count workers in these projects (only for displayed projects)
     const siteIds = new Set(state.sites.map(s => s.id));
-    const workersInProjects = state.workers.filter(w => w.assignedSiteId && siteIds.has(w.assignedSiteId) && w.status !== 'pending').length;
+    
+    // Apply Date Range Filter to stats if active
+    let relevantWorkers = state.workers.filter(w => w.status !== 'pending');
+    if (view === 'projects' && (projectSearchStartDate || projectSearchEndDate)) {
+        relevantWorkers = relevantWorkers.filter(w => {
+            if (!w.hireDate) return false;
+            if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
+            if (projectSearchEndDate && w.hireDate > projectSearchEndDate) return false;
+            return true;
+        });
+    }
+
+    const workersInProjects = relevantWorkers.filter(w => w.assignedSiteId && siteIds.has(w.assignedSiteId)).length;
 
     return { totalProjects, activeProjects, stoppedProjects, completedProjects, workersInProjects };
-  }, [state.sites, state.workers]);
+  }, [state.sites, state.workers, view, projectSearchStartDate, projectSearchEndDate]);
 
   // waitingData removed
 
@@ -222,7 +415,10 @@ function ReportsContent() {
 
     let fileName = `Labour_Report_${selectedDate}.xlsx`;
     if (view === 'projects') {
-        fileName = `تقرير_توزيع_المشاريع_${selectedDate}.xlsx`;
+        const dateSuffix = (projectSearchStartDate || projectSearchEndDate) 
+            ? `${projectSearchStartDate || 'البداية'}_الى_${projectSearchEndDate || 'النهاية'}`
+            : selectedDate;
+        fileName = `تقرير_توزيع_المشاريع_${dateSuffix}.xlsx`;
     } else if (view === 'leave') {
         fileName = `تقرير_الإجازات_${selectedDate}.xlsx`;
     } else if (view === 'all') {
@@ -233,6 +429,71 @@ function ReportsContent() {
         fileName = `تقرير_السائقين_${selectedDate}.xlsx`;
     } else if (view === 'vehicles') {
         fileName = `تقرير_المركبات_${selectedDate}.xlsx`;
+    } else if (view === 'violations') {
+        fileName = `تقرير_المخالفات_${violationSearchStartDate || 'الكل'}_الى_${violationSearchEndDate || 'الكل'}.xlsx`;
+        const violationsRows = violationSearchResults.map(item => ({
+             'رقم اللوحة': item.vehicle.plateNumber,
+             'نوع المركبة': item.vehicle.type,
+             'تاريخ المخالفة': item.violation.date,
+             'وقت المخالفة': item.violation.time,
+             'نوع المخالفة': item.violation.type,
+             'رقم المخالفة': item.violation.violationNumber || '',
+             'المدينة': item.violation.city,
+             'القيمة': item.violation.cost,
+             'اسم السائق': item.violation.driverName || '',
+             'الوصف': item.violation.description || ''
+        }));
+        
+        // Add Summary Row
+        if (violationsRows.length > 0) {
+            const totalCost = violationsRows.reduce((sum, row) => sum + (Number(row['القيمة']) || 0), 0);
+            violationsRows.push({} as any); // Spacer
+            violationsRows.push({
+                'رقم اللوحة': 'الإجمالي:',
+                'القيمة': totalCost
+            } as any);
+        }
+
+        const wsViolations = utils.json_to_sheet(violationsRows);
+        wsViolations['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 20 }, { wch: 30 }];
+        utils.book_append_sheet(wb, wsViolations, "المخالفات");
+        writeFile(wb, fileName);
+        return;
+    } else if (view === 'maintenance') {
+        fileName = `تقرير_الصيانة_${maintenanceStartDate}_الى_${maintenanceEndDate}.xlsx`;
+        const maintenanceRows: any[] = [];
+        (state.vehicles || []).forEach(v => {
+            if (v.maintenanceHistory && v.maintenanceHistory.length > 0) {
+                v.maintenanceHistory.forEach(m => {
+                    if (m.date >= maintenanceStartDate && m.date <= maintenanceEndDate) {
+                        maintenanceRows.push({
+                            'رقم اللوحة': v.plateNumber,
+                            'نوع المركبة': v.type,
+                            'تاريخ الصيانة': m.date,
+                            'نوع الصيانة': m.type === 'oil_change' ? 'تغيير زيت' : (m.type === 'repair' ? 'إصلاح' : 'أخرى'),
+                            'التكلفة': m.cost,
+                            'ملاحظات': m.notes || ''
+                        });
+                    }
+                });
+            }
+        });
+
+        // Add Summary Row
+        if (maintenanceRows.length > 0) {
+            const totalCost = maintenanceRows.reduce((sum, row) => sum + (Number(row['التكلفة']) || 0), 0);
+            maintenanceRows.push({}); // Spacer
+            maintenanceRows.push({
+                'رقم اللوحة': 'الإجمالي:',
+                'التكلفة': totalCost
+            });
+        }
+
+        const wsMaintenance = utils.json_to_sheet(maintenanceRows);
+        wsMaintenance['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }];
+        utils.book_append_sheet(wb, wsMaintenance, "الصيانة");
+        writeFile(wb, fileName);
+        return;
     }
 
     if (showHistory && view === 'leave') {
@@ -317,7 +578,7 @@ function ReportsContent() {
       const driverRows: any[] = drivers.map(d => {
          const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
          let totalTransported = 0;
-         const sitesDetails = assignedSites.map(s => {
+        const sitesDetails = assignedSites.map(s => {
              const ad = s.assignedDrivers?.find((x: any) => x.driverId === d.id);
              const count = ad ? ad.count : (s.driverId === d.id ? s.driverTransportCount : 0) || 0;
              totalTransported += Number(count);
@@ -325,7 +586,7 @@ function ReportsContent() {
          }).join('، ');
 
          return {
-             'اسم السائق': d.name,
+             'اسم السائق': d.englishName ? `${d.name} - ${d.englishName}` : d.name,
              'رقم الجوال': d.phone,
              'نوع السيارة': d.driverCarType || '',
              'رقم اللوحة': d.driverCarPlate || '',
@@ -362,6 +623,112 @@ function ReportsContent() {
       return;
     }
 
+    if (view === 'iqama_status') {
+      fileName = `تقرير_الإقامة_${selectedDate}.xlsx`;
+      const activeWorkers = state.workers.filter(w => w.status !== 'pending' && w.iqamaExpiry);
+      const classify = (d?: number) => d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : (d !== undefined ? 'valid' : 'none'));
+      const rows = activeWorkers.map(w => {
+        const iqDays = daysRemaining(w.iqamaExpiry);
+        return {
+          code: w.code || '',
+          nameAr: w.name,
+          nameEn: w.englishName || '',
+          iqamaNumber: w.iqamaNumber || '',
+          iqamaExpiry: w.iqamaExpiry || '',
+          iqDays: iqDays === undefined ? '' : iqDays,
+          iqStatus: labelFor(iqDays, !!w.iqamaExpiry),
+          _iqClass: classify(iqDays),
+        };
+      });
+      const sheets = [
+        { name: 'إقامات سارية', filter: (r: any) => r._iqClass === 'valid', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'رقم الإقامة': r.iqamaNumber, 'انتهاء الإقامة': r.iqamaExpiry, 'الأيام المتبقية': r.iqDays, 'الحالة': r.iqStatus }) },
+        { name: 'إقامات قرب الانتهاء', filter: (r: any) => r._iqClass === 'soon', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'رقم الإقامة': r.iqamaNumber, 'انتهاء الإقامة': r.iqamaExpiry, 'الأيام المتبقية': r.iqDays, 'الحالة': r.iqStatus }) },
+        { name: 'إقامات منتهية', filter: (r: any) => r._iqClass === 'expired', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'رقم الإقامة': r.iqamaNumber, 'انتهاء الإقامة': r.iqamaExpiry, 'الأيام المتبقية': r.iqDays, 'الحالة': r.iqStatus }) },
+      ];
+      sheets.forEach(s => {
+        const data = (rows as any[]).filter(s.filter).map(s.pick);
+        const ws = utils.json_to_sheet(data);
+        (ws as any)['!cols'] = s.cols;
+        utils.book_append_sheet(wb, ws, s.name);
+      });
+      writeFile(wb, fileName);
+      return;
+    }
+    if (view === 'insurance_status') {
+      fileName = `تقرير_التأمين_${selectedDate}.xlsx`;
+      const activeWorkers = state.workers.filter(w => w.status !== 'pending' && w.insuranceExpiry);
+      const classify = (d?: number) => d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : (d !== undefined ? 'valid' : 'none'));
+      const rows = activeWorkers.map(w => {
+        const insDays = daysRemaining(w.insuranceExpiry);
+        return {
+          code: w.code || '',
+          nameAr: w.name,
+          nameEn: w.englishName || '',
+          insuranceExpiry: w.insuranceExpiry || '',
+          insDays: insDays === undefined ? '' : insDays,
+          insStatus: labelFor(insDays, !!w.insuranceExpiry),
+          _insClass: classify(insDays),
+        };
+      });
+      const sheets = [
+        { name: 'تأمين ساري', filter: (r: any) => r._insClass === 'valid', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'انتهاء التأمين': r.insuranceExpiry, 'الأيام المتبقية': r.insDays, 'الحالة': r.insStatus }) },
+        { name: 'تأمين قرب الانتهاء', filter: (r: any) => r._insClass === 'soon', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'انتهاء التأمين': r.insuranceExpiry, 'الأيام المتبقية': r.insDays, 'الحالة': r.insStatus }) },
+        { name: 'تأمين منتهي', filter: (r: any) => r._insClass === 'expired', cols: [{ wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }], pick: (r: any) => ({ 'الكود': r.code, 'الاسم العربي': r.nameAr, 'الاسم الإنجليزي': r.nameEn, 'انتهاء التأمين': r.insuranceExpiry, 'الأيام المتبقية': r.insDays, 'الحالة': r.insStatus }) },
+      ];
+      sheets.forEach(s => {
+        const data = (rows as any[]).filter(s.filter).map(s.pick);
+        const ws = utils.json_to_sheet(data);
+        (ws as any)['!cols'] = s.cols;
+        utils.book_append_sheet(wb, ws, s.name);
+      });
+      writeFile(wb, fileName);
+      return;
+    }
+
+    if (view === 'vehicle_movement') {
+        fileName = `تقرير_حركة_المركبات_${vehicleMovementStartDate ? vehicleMovementStartDate : 'البداية'}_إلى_${vehicleMovementEndDate ? vehicleMovementEndDate : 'النهاية'}.xlsx`;
+        const vehicleMovementRows = (state.vehicles || []).map(v => {
+            const driver = state.workers.find(w => w.driverCarPlate === v.plateNumber);
+            let tripCount = 0;
+            if (driver) {
+                const assignedSites = state.sites.filter(s => 
+                    s.driverId === driver.id || 
+                    s.assignedDrivers?.some((ad: any) => ad.driverId === driver.id)
+                );
+                
+                assignedSites.forEach(s => {
+                     // Current trip count logic
+                     tripCount += 1; 
+                });
+            }
+            
+            // Filter maintenance by date range
+            const filteredMaintenance = (v.maintenanceHistory || []).filter(m => {
+                if (vehicleMovementStartDate && m.date < vehicleMovementStartDate) return false;
+                if (vehicleMovementEndDate && m.date > vehicleMovementEndDate) return false;
+                return true;
+            });
+
+            const lastMaintenance = filteredMaintenance.length > 0 
+                ? filteredMaintenance.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                : null;
+                
+            return {
+                'رقم المركبة': v.plateNumber,
+                'السائق': driver ? (driver.englishName ? `${driver.name} - ${driver.englishName}` : driver.name) : 'غير معين',
+                'عدد الرحلات (المواقع الحالية)': tripCount,
+                'الصيانة (في الفترة)': lastMaintenance ? `${lastMaintenance.date} (${lastMaintenance.type === 'oil_change' ? 'تغيير زيت' : 'إصلاح'})` : 'لا يوجد',
+                'الملاحظات': lastMaintenance ? (lastMaintenance.notes || '-') : '-'
+            };
+        });
+        
+        const wsVehicleMovement = utils.json_to_sheet(vehicleMovementRows);
+        wsVehicleMovement['!cols'] = [{ wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 30 }, { wch: 30 }];
+        utils.book_append_sheet(wb, wsVehicleMovement, "حركة المركبات");
+        writeFile(wb, fileName);
+        return;
+    }
+
     if (view === 'vehicles') {
       const vehicleRows = (state.vehicles || []).map(v => ({
         'رقم اللوحة': v.plateNumber,
@@ -379,103 +746,48 @@ function ReportsContent() {
       return;
     }
 
-    if (view === 'salaries') {
-        fileName = `تقرير_الرواتب_${selectedDate}.xlsx`;
-        const salaryData = state.salaryData || {};
-        
-        const salaryRows = state.workers.map(worker => {
-             const data = salaryData[worker.id] || {
-                  basicSalary: 0,
-                  advance: 0,
-                  advanceRepayment: 0,
-                  absenceDays: 0,
-                  violationValue: 0,
-                  violationRepayment: 0,
-                  incentives: 0
-             };
-             
-             const remainingAdvance = Math.max(0, (data.advance || 0) - (data.advanceRepayment || 0));
-             const absenceValue = Math.round(((data.basicSalary || 0) / 30) * (data.absenceDays || 0));
-             const remainingViolations = Math.max(0, (data.violationValue || 0) - (data.violationRepayment || 0));
-             const netSalary = Math.max(0, (data.basicSalary || 0) + (data.incentives || 0) - (data.advanceRepayment || 0) - absenceValue - (data.violationRepayment || 0));
-             
-             return {
-                 'الكود': worker.code || '',
-                 'الموظف': worker.name,
-                 'المهنة': worker.skill,
-                 'الراتب الاساسي': data.basicSalary || 0,
-                 'السلفه': data.advance || 0,
-                 'سداد سلفه': data.advanceRepayment || 0,
-                 'باقي السلفه': remainingAdvance,
-                 'أيام غياب': data.absenceDays || 0,
-                 'قيمة الغياب': absenceValue,
-                 'قيمة مخالفات': data.violationValue || 0,
-                 'سداد مخالفات': data.violationRepayment || 0,
-                 'متبقي مخالفات': remainingViolations,
-                 'حوافز': data.incentives || 0,
-                 'صافي الراتب': netSalary
-             };
-        });
-        
-        // Calculate Totals
-        const totals = salaryRows.reduce((acc: any, row: any) => ({
-             'الراتب الاساسي': acc['الراتب الاساسي'] + row['الراتب الاساسي'],
-             'السلفه': acc['السلفه'] + row['السلفه'],
-             'سداد سلفه': acc['سداد سلفه'] + row['سداد سلفه'],
-             'باقي السلفه': acc['باقي السلفه'] + row['باقي السلفه'],
-             'أيام غياب': acc['أيام غياب'] + row['أيام غياب'],
-             'قيمة الغياب': acc['قيمة الغياب'] + row['قيمة الغياب'],
-             'قيمة مخالفات': acc['قيمة مخالفات'] + row['قيمة مخالفات'],
-             'سداد مخالفات': acc['سداد مخالفات'] + row['سداد مخالفات'],
-             'متبقي مخالفات': acc['متبقي مخالفات'] + row['متبقي مخالفات'],
-             'حوافز': acc['حوافز'] + row['حوافز'],
-             'صافي الراتب': acc['صافي الراتب'] + row['صافي الراتب']
-        }), {
-             'الراتب الاساسي': 0,
-             'السلفه': 0,
-             'سداد سلفه': 0,
-             'باقي السلفه': 0,
-             'أيام غياب': 0,
-             'قيمة الغياب': 0,
-             'قيمة مخالفات': 0,
-             'سداد مخالفات': 0,
-             'متبقي مخالفات': 0,
-             'حوافز': 0,
-             'صافي الراتب': 0
-        });
-
-        // Add Total Row
-        salaryRows.push({
-             'الكود': 'الإجمالي',
-             'الموظف': '-',
-             'المهنة': '-',
-             ...totals
-        });
-
-        const wsSalaries = utils.json_to_sheet(salaryRows);
-        wsSalaries['!cols'] = [{ wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }];
-        utils.book_append_sheet(wb, wsSalaries, "الرواتب");
-        writeFile(wb, fileName);
-        return;
-    }
+    // تقرير الرواتب تمت إزالته
 
     if (view === 'projects_summary') {
+      fileName = `تقرير_المشاريع_المبسط_${projectSearchStartDate ? projectSearchStartDate : 'البداية'}_إلى_${projectSearchEndDate ? projectSearchEndDate : 'النهاية'}.xlsx`;
       const summaryRows = state.sites.map(site => {
-        const engineer = state.workers.find(w => w.id === site.engineerId);
-        let statusText = 'جاري العمل';
-        if (site.status === 'completed') statusText = 'منتهي';
-        else if (site.status === 'stopped') statusText = 'متوقف';
+        
+        let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
+        if (projectSearchEndDate) {
+            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
+        }
+        
+        const workerCount = siteWorkers.length;
+        
+        let absenceCount = 0;
+        siteWorkers.forEach(w => {
+            if (w.absenceHistory) {
+                w.absenceHistory.forEach(h => {
+                    if (projectSearchStartDate && h.date < projectSearchStartDate) return;
+                    if (projectSearchEndDate && h.date > projectSearchEndDate) return;
+                    absenceCount++;
+                });
+            }
+        });
+        
+        const absenceStatus = absenceCount > 0 ? 'يوجد غياب' : 'لا يوجد';
+        
+        const expiredInsuranceCount = siteWorkers.filter(w => {
+             if (!w.insuranceExpiry) return false;
+             return new Date(w.insuranceExpiry) < new Date();
+        }).length;
+        const insuranceStatus = expiredInsuranceCount > 0 ? `يوجد ${expiredInsuranceCount} منتهي` : 'ساري';
         
         return {
           'اسم المشروع': site.name,
-          'المسؤول عن المشروع': engineer ? engineer.name : 'بدون',
-          'الحالة': statusText,
-          'ملاحظات': site.statusNote || '',
-          'عدد العمال': state.workers.filter(w => w.assignedSiteId === site.id).length
+          'عدد العمال': workerCount,
+          'عدد الغياب': absenceCount,
+          'حالة الغياب': absenceStatus,
+          'حالة التأمين': insuranceStatus
         };
       });
       const wsSummary = utils.json_to_sheet(summaryRows);
-      wsSummary['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 40 }, { wch: 10 }];
+      wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }];
       utils.book_append_sheet(wb, wsSummary, "تقرير المشاريع المبسط");
       writeFile(wb, fileName);
       return;
@@ -497,7 +809,7 @@ function ReportsContent() {
                  const assignedSite = state.sites.find(s => s.id === w.assignedSiteId);
                  absenceRows.push({
                      'الكود': w.code || '',
-                     'اسم العامل': w.name,
+                    'اسم العامل': w.englishName ? `${w.name} - ${w.englishName}` : w.name,
                      'المهنة': skLabel,
                      'رقم الجوال': w.phone,
                      'تاريخ الغياب': h.date,
@@ -531,7 +843,7 @@ function ReportsContent() {
                 const absenceDate = w.absentSince ? new Date(w.absentSince).toLocaleDateString('en-GB') : '-';
                 return {
                     'الكود': w.code || '',
-                    'اسم العامل': w.name,
+                    'اسم العامل': w.englishName ? `${w.name} - ${w.englishName}` : w.name,
                     'المهنة': skLabel,
                     'رقم الجوال': w.phone,
                     'تاريخ الغياب': absenceDate,
@@ -561,7 +873,7 @@ function ReportsContent() {
         projectRows.push({
           'الكود': w.code || '',
           'الموقع': site.name,
-          'الاسم': w.name,
+          'الاسم': w.englishName ? `${w.name} - ${w.englishName}` : w.name,
           'المهنة': skLabel,
           'رقم الإقامة': w.iqamaNumber,
           'الجوال': w.phone,
@@ -611,7 +923,10 @@ function ReportsContent() {
     const summaryRows = state.sites.map(site => {
       const engineer = state.workers.find(w => w.id === site.engineerId);
       const driver = state.workers.find(w => w.id === site.driverId);
-      const workerNames = state.workers.filter(w => w.assignedSiteId === site.id).map(w => w.name).join(', ');
+      const workerNames = state.workers
+        .filter(w => w.assignedSiteId === site.id)
+        .map(w => (w.englishName ? `${w.name} - ${w.englishName}` : w.name))
+        .join(', ');
       
       let statusText = 'جاري العمل';
       if (site.status === 'completed') statusText = 'منتهي';
@@ -620,8 +935,8 @@ function ReportsContent() {
       return {
         'المشروع': site.name,
         'الحالة': statusText,
-        'المسؤول': engineer ? engineer.name : '',
-        'السائق': driver ? driver.name : '',
+        'المسؤول': engineer ? (engineer.englishName ? `${engineer.name} - ${engineer.englishName}` : engineer.name) : '',
+        'السائق': driver ? (driver.englishName ? `${driver.name} - ${driver.englishName}` : driver.name) : '',
         'عدد العمال': state.workers.filter(w => w.assignedSiteId === site.id).length,
       };
     });
@@ -648,7 +963,7 @@ function ReportsContent() {
         
         return {
           '#': idx + 1,
-          'الاسم': w.name,
+          'الاسم': w.englishName ? `${w.name} - ${w.englishName}` : w.name,
           'الاسم (EN)': w.englishName || '',
           'المهنة': skLabel,
           'الموقع الحالي': assignedSite ? assignedSite.name : 'غير موزع (غياب)',
@@ -676,13 +991,17 @@ function ReportsContent() {
     writeFile(wb, fileName);
   };
 
+  // Project filter for 'projects' view
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const projectOptions = useMemo(() => state.sites.map(s => ({ value: s.id, label: s.name })), [state.sites]);
+
   return (
     <main className="min-h-screen bg-gray-50 pt-24 pb-24 print:pt-0 print:pb-0 print:bg-white animate-fade-in font-cairo">
       <div className="max-w-[1920px] mx-auto px-4 md:px-10 print:max-w-none print:px-2">
         <div className="flex flex-col gap-6 print:hidden mb-8">
             <div className="text-center">
                  <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                    {view === 'projects' ? 'صفحة التقارير' : view === 'projects_summary' ? 'تقرير المشاريع المبسط' : view === 'drivers' ? 'تقرير السائقين' : view === 'vehicles' ? 'تقرير المركبات' : view === 'violations' ? 'تقرير المخالفات' : 'قاعدة بيانات العمال الشاملة'}
+                    {view === 'projects' ? 'صفحة التقارير' : view === 'projects_summary' ? 'تقرير المشاريع المبسط' : view === 'drivers' ? 'تقرير السائقين' : view === 'vehicles' ? 'تقرير المركبات' : view === 'vehicle_movement' ? 'تقرير حركة المركبات' : 'قاعدة بيانات العمال الشاملة'}
                  </h1>
                  <p className="text-gray-500">استخراج التقارير وتصديرها</p>
             </div>
@@ -693,6 +1012,7 @@ function ReportsContent() {
                     لوحة التوزيع
                 </Link>
                 
+                {(view !== 'violations' && view !== 'maintenance' && view !== 'projects') && (
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 group">
                     <Calendar className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
                     <input 
@@ -703,6 +1023,78 @@ function ReportsContent() {
                         dir="ltr"
                     />
                 </div>
+                )}
+
+                {/* Project Date Range Filter */}
+                {(view === 'projects' || view === 'projects_summary') && (
+                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm hover:shadow-md transition-all duration-200">
+                        <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
+                             <span className="text-xs font-bold text-gray-500 whitespace-nowrap">
+                                {view === 'projects' ? 'تاريخ التعيين من:' : 'من تاريخ:'}
+                             </span>
+                             <input 
+                                type="date" 
+                                value={projectSearchStartDate}
+                                onChange={(e) => setProjectSearchStartDate(e.target.value)}
+                                className="text-sm outline-none bg-transparent text-gray-900 font-bold cursor-pointer w-[110px]"
+                             />
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <span className="text-xs font-bold text-gray-500 whitespace-nowrap">إلى:</span>
+                             <input 
+                                type="date" 
+                                value={projectSearchEndDate}
+                                onChange={(e) => setProjectSearchEndDate(e.target.value)}
+                                className="text-sm outline-none bg-transparent text-gray-900 font-bold cursor-pointer w-[110px]"
+                             />
+                        </div>
+                        {(projectSearchStartDate || projectSearchEndDate) && (
+                            <button 
+                                onClick={() => { setProjectSearchStartDate(''); setProjectSearchEndDate(''); }}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors mr-1"
+                                title="مسح الفلتر"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Violations Filters Moved to Main Content Area */}
+                {view === 'violations' && null}
+                
+                {/* Vehicle Movement Filters */}
+                {view === 'vehicle_movement' && (
+                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm hover:shadow-md transition-all duration-200">
+                        <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
+                             <span className="text-xs font-bold text-gray-500 whitespace-nowrap">من:</span>
+                             <input 
+                                type="date" 
+                                value={vehicleMovementStartDate}
+                                onChange={(e) => setVehicleMovementStartDate(e.target.value)}
+                                className="text-sm outline-none bg-transparent text-gray-900 font-bold cursor-pointer w-[110px]"
+                             />
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <span className="text-xs font-bold text-gray-500 whitespace-nowrap">إلى:</span>
+                             <input 
+                                type="date" 
+                                value={vehicleMovementEndDate}
+                                onChange={(e) => setVehicleMovementEndDate(e.target.value)}
+                                className="text-sm outline-none bg-transparent text-gray-900 font-bold cursor-pointer w-[110px]"
+                             />
+                        </div>
+                        {(vehicleMovementStartDate || vehicleMovementEndDate) && (
+                            <button 
+                                onClick={() => { setVehicleMovementStartDate(''); setVehicleMovementEndDate(''); }}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors mr-1"
+                                title="مسح الفلتر"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {user?.role !== 'viewer' && (
                 <>
@@ -734,10 +1126,20 @@ function ReportsContent() {
                     { id: 'projects_summary', label: 'تقرير المشاريع المبسط', icon: FileText, activeClass: 'bg-orange-500 text-white shadow-lg shadow-orange-200 ring-2 ring-orange-100', inactiveClass: 'text-gray-600 hover:bg-orange-50 hover:text-orange-700' },
                     { id: 'drivers', label: 'تقرير السائقين', icon: Truck, activeClass: 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 ring-2 ring-indigo-100', inactiveClass: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700' },
                     { id: 'vehicles', label: 'تقرير المركبات', icon: Car, activeClass: 'bg-purple-600 text-white shadow-lg shadow-purple-200 ring-2 ring-purple-100', inactiveClass: 'text-gray-600 hover:bg-purple-50 hover:text-purple-700' },
-                    { id: 'violations', label: 'تقرير المخالفات', icon: AlertTriangle, activeClass: 'bg-red-600 text-white shadow-lg shadow-red-200 ring-2 ring-red-100', inactiveClass: 'text-gray-600 hover:bg-red-50 hover:text-red-700' },
-                    { id: 'salaries', label: 'تقرير الرواتب', icon: Wallet, activeClass: 'bg-teal-600 text-white shadow-lg shadow-teal-200 ring-2 ring-teal-100', inactiveClass: 'text-gray-600 hover:bg-teal-50 hover:text-teal-700' },
+                    { id: 'vehicle_movement', label: 'حركة المركبات', icon: Truck, activeClass: 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 ring-2 ring-indigo-100', inactiveClass: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700' },
+                    { id: 'violations', label: 'المخالفات المرورية', icon: AlertTriangle, activeClass: 'bg-red-600 text-white shadow-lg shadow-red-200 ring-2 ring-red-100', inactiveClass: 'text-gray-600 hover:bg-red-50 hover:text-red-700' },
+                    { id: 'iqama_status', label: 'حالة الإقامة', icon: ShieldCheck, activeClass: 'bg-teal-600 text-white shadow-lg shadow-teal-200 ring-2 ring-teal-100', inactiveClass: 'text-gray-600 hover:bg-teal-50 hover:text-teal-700' },
+                    { id: 'insurance_status', label: 'حالة التأمين', icon: ShieldCheck, activeClass: 'bg-cyan-600 text-white shadow-lg shadow-cyan-200 ring-2 ring-cyan-100', inactiveClass: 'text-gray-600 hover:bg-cyan-50 hover:text-cyan-700' },
                     { id: 'all', label: 'الكل (قاعدة البيانات)', icon: Users, activeClass: 'bg-slate-800 text-white shadow-lg shadow-slate-200 ring-2 ring-slate-100', inactiveClass: 'text-gray-600 hover:bg-slate-50 hover:text-slate-800' },
-                ].filter(tab => !(user?.role === 'engineer' && (tab.id === 'vehicles' || tab.id === 'violations' || tab.id === 'projects_summary' || tab.id === 'drivers' || tab.id === 'salaries' || tab.id === 'all'))).map((tab) => {
+                ].filter(tab => {
+                    if (user?.role === 'engineer' && (tab.id === 'vehicles' || tab.id === 'violations' || tab.id === 'maintenance' || tab.id === 'projects_summary' || tab.id === 'drivers' || tab.id === 'all')) {
+                        return false;
+                    }
+                    if (user?.role === 'accountant' && tab.id !== 'absence' && tab.id !== 'violations') {
+                        return false;
+                    }
+                    return true;
+                }).map((tab) => {
                     const Icon = tab.icon;
                     const isActive = view === tab.id;
                     return (
@@ -754,24 +1156,76 @@ function ReportsContent() {
             </div>
         </div>
 
+        {/* Project Search (Projects View Only) */}
+        {view === 'projects' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 print:hidden flex items-center gap-4">
+             <div className="flex items-center gap-3 w-full md:w-[380px]">
+               <div className="text-sm font-bold text-gray-600 whitespace-nowrap">بحث بالمشروع</div>
+               <SearchableSelect
+                 className="w-full"
+                 placeholder="اختر المشروع للطباعة (الكل)"
+                 options={projectOptions}
+                 value={selectedProjectId}
+                 onChange={(val) => setSelectedProjectId(val)}
+                 clearable
+               />
+             </div>
+             {selectedProjectId && (
+               <button
+                 onClick={() => window.print()}
+                 className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold shadow-sm"
+               >
+                 طباعة هذا المشروع
+               </button>
+             )}
+          </div>
+        )}
+
         {/* Print Header */}
+        {(view === 'projects' || view === 'projects_summary') && (
         <div className="hidden print:block mb-6 border-b pb-4">
             <div className="flex justify-between items-end">
                 <div>
                     <h1 className="text-3xl font-bold mb-2">
-                        {view === 'projects' ? 'تقرير توزيع المشاريع' : view === 'projects_summary' ? 'تقرير المشاريع المبسط' : view === 'drivers' ? 'تقرير السائقين' : view === 'vehicles' ? 'تقرير المركبات' : view === 'violations' ? 'تقرير المخالفات' : view === 'salaries' ? 'تقرير الرواتب' : 'قاعدة بيانات العمال الشاملة'}
+                        {view === 'projects' ? 'تقرير توزيع المشاريع' : 'تقرير المشاريع المبسط'}
                     </h1>
-                    <div className="text-base text-gray-600 font-medium">تاريخ التقرير: {toDMY(selectedDate)}</div>
+                    <div className="text-base text-gray-600 font-medium">
+                        {view === 'projects' && (projectSearchStartDate || projectSearchEndDate) 
+                            ? `الفترة: ${toDMY(projectSearchStartDate) || 'البداية'} - ${toDMY(projectSearchEndDate) || 'النهاية'}`
+                            : `تاريخ التقرير: ${toDMY(selectedDate)}`
+                        }
+                    </div>
                 </div>
                 <div className="text-left text-sm text-gray-400">
                     تم الطباعة: {nowDMYTime()}
                 </div>
             </div>
         </div>
+        )}
+
+        {/* Vehicle Movement Print Header */}
+        {view === 'vehicle_movement' && (
+        <div className="hidden print:block mb-6 border-b pb-4">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h1 className="text-3xl font-bold mb-2">تقرير حركة المركبات</h1>
+                    <div className="text-base text-gray-600 font-medium">
+                        {(vehicleMovementStartDate || vehicleMovementEndDate) 
+                            ? `الفترة: ${toDMY(vehicleMovementStartDate) || 'البداية'} - ${toDMY(vehicleMovementEndDate) || 'النهاية'}`
+                            : `تاريخ التقرير: ${toDMY(selectedDate)}`
+                        }
+                    </div>
+                </div>
+                <div className="text-left text-sm text-gray-400">
+                    تم الطباعة: {nowDMYTime()}
+                </div>
+            </div>
+        </div>
+        )}
 
         {/* Project Statistics Dashboard */}
-        {(view === 'projects' || view === 'projects_summary') && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 print:grid-cols-4 print:gap-2 print:mb-4 break-inside-avoid">
+        {view === 'projects' && (
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 break-inside-avoid ${view === 'projects' ? 'print:hidden' : 'print:grid print:grid-cols-4 print:gap-2 print:mb-4'}`}>
                 {/* Total Projects */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4 print:p-2 print:border-gray-400 print:shadow-none">
                     <div className="p-3 bg-blue-50 rounded-lg text-blue-600 [print-color-adjust:exact]">
@@ -821,54 +1275,149 @@ function ReportsContent() {
         {view === 'projects_summary' && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-right border-separate border-spacing-0">
+                    <table className="w-full table-auto md:table-fixed text-right border-separate border-spacing-0">
                         <thead className="bg-gray-100 print:bg-gray-100">
                             <tr>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">اسم المشروع</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">المسؤول عن المشروع</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">الحالة</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">ملاحظات</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">عدد العمال</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">اسم المشروع</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">عدد العمال</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">عدد الغياب</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">حالة الغياب</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">حالة التأمين</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
                             {state.sites.map((site, idx) => {
-                                const engineer = state.workers.find(w => w.id === site.engineerId);
-                                const workerCount = state.workers.filter(w => w.assignedSiteId === site.id).length;
                                 
-                                let statusColor = 'bg-green-100 text-green-700 border-green-200';
-                                let statusText = 'جاري العمل';
-                                if (site.status === 'completed') {
-                                    statusColor = 'bg-blue-100 text-blue-700 border-blue-200';
-                                    statusText = 'منتهي';
-                                } else if (site.status === 'stopped') {
-                                    statusColor = 'bg-red-100 text-red-700 border-red-200';
-                                    statusText = 'متوقف';
+                                let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
+                                if (projectSearchEndDate) {
+                                    siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
                                 }
+                                
+                                const workerCount = siteWorkers.length;
+                                
+                                let absenceCount = 0;
+                                siteWorkers.forEach(w => {
+                                    if (w.absenceHistory) {
+                                        w.absenceHistory.forEach(h => {
+                                            if (projectSearchStartDate && h.date < projectSearchStartDate) return;
+                                            if (projectSearchEndDate && h.date > projectSearchEndDate) return;
+                                            absenceCount++;
+                                        });
+                                    }
+                                });
+                                
+                                const absenceStatus = absenceCount > 0 ? 'يوجد غياب' : 'لا يوجد';
+                                
+                                const expiredInsuranceCount = siteWorkers.filter(w => {
+                                    if (!w.insuranceExpiry) return false;
+                                    return new Date(w.insuranceExpiry) < new Date();
+                                }).length;
+                                const insuranceStatus = expiredInsuranceCount > 0 ? `يوجد ${expiredInsuranceCount} منتهي` : 'ساري';
 
                                 return (
                                     <tr key={site.id} className={`hover:bg-blue-50 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                <td className="px-5 py-4 font-bold text-gray-900 text-base group-hover:text-blue-700 hover:underline transition-colors print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{site.name}</td>
-                                        <td className="px-5 py-4 text-gray-700 font-medium text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{engineer ? engineer.name : <span className="text-gray-400">بدون</span>}</td>
-                                        <td className="px-5 py-4 print:py-1.5 print:px-2">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusColor} print:border-gray-300 print:bg-white print:text-black print:px-2 print:py-0.5`}>
-                                                {statusText}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-4 text-gray-600 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{site.statusNote || '-'}</td>
-                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs">{workerCount}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-gray-900 text-sm md:text-base group-hover:text-blue-700 hover:underline transition-colors print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{site.name}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-gray-900 text-sm md:text-base print:py-1.5 print:px-2 print:text-xs">{workerCount}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-red-600 text-sm md:text-base print:py-1.5 print:px-2 print:text-xs">{absenceCount}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 text-gray-700 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{absenceStatus}</td>
+                                        <td className={`px-2 md:px-5 py-2 md:py-4 font-bold text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal ${expiredInsuranceCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{insuranceStatus}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                         <tfoot className="bg-gray-100 border-t-2 border-gray-300 print:border-gray-800 font-bold">
                             <tr>
-                                <td colSpan={4} className="px-5 py-4 text-gray-900 text-left pl-10 print:py-2 print:px-2 print:text-sm">الإجمالي الكلي للعمال في المشاريع:</td>
-                                <td className="px-5 py-4 text-blue-700 text-lg print:text-black print:py-2 print:px-2 print:text-sm">
-                                    {state.sites.reduce((acc, site) => acc + state.workers.filter(w => w.assignedSiteId === site.id).length, 0)}
+                                <td className="px-2 md:px-5 py-3 md:py-4 text-gray-900 text-left pl-6 md:pl-10 print:py-2 print:px-2 print:text-sm">الإجمالي الكلي:</td>
+                                <td className="px-2 md:px-5 py-3 md:py-4 text-blue-700 text-base md:text-lg print:text-black print:py-2 print:px-2 print:text-sm">
+                                    {state.sites.reduce((acc, site) => {
+                                        let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
+                                        if (projectSearchEndDate) {
+                                            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
+                                        }
+                                        return acc + siteWorkers.length;
+                                    }, 0)}
                                 </td>
+                                <td className="px-2 md:px-5 py-3 md:py-4 text-red-700 text-base md:text-lg print:text-black print:py-2 print:px-2 print:text-sm">
+                                    {state.sites.reduce((acc, site) => {
+                                        let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
+                                        if (projectSearchEndDate) {
+                                            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
+                                        }
+                                        let abs = 0;
+                                        siteWorkers.forEach(w => {
+                                            if (w.absenceHistory) {
+                                                w.absenceHistory.forEach(h => {
+                                                    if (projectSearchStartDate && h.date < projectSearchStartDate) return;
+                                                    if (projectSearchEndDate && h.date > projectSearchEndDate) return;
+                                                    abs++;
+                                                });
+                                            }
+                                        });
+                                        return acc + abs;
+                                    }, 0)}
+                                </td>
+                                <td colSpan={2}></td>
                             </tr>
                         </tfoot>
+                    </table>
+                </div>
+            </div>
+        )}
+
+        {view === 'vehicle_movement' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
+                <div className="overflow-x-auto">
+                    <table className="w-full table-auto md:table-fixed text-right border-separate border-spacing-0">
+                        <thead className="bg-gray-100 print:bg-gray-100">
+                            <tr>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">رقم المركبة</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">السائق</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">عدد الرحلات</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">آخر صيانة</th>
+                                <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">الملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                            {(state.vehicles || []).map((v, idx) => {
+                                const driver = state.workers.find(w => w.driverCarPlate === v.plateNumber);
+                                const assignedSites = driver ? state.sites.filter(s => 
+                                    s.driverId === driver.id || 
+                                    s.assignedDrivers?.some((ad: any) => ad.driverId === driver.id)
+                                ) : [];
+                                const tripCount = assignedSites.length;
+
+                                const lastMaintenance = v.maintenanceHistory && v.maintenanceHistory.length > 0 
+                                    ? v.maintenanceHistory
+                                        .filter(m => {
+                                            if (vehicleMovementStartDate && m.date < vehicleMovementStartDate) return false;
+                                            if (vehicleMovementEndDate && m.date > vehicleMovementEndDate) return false;
+                                            return true;
+                                        })
+                                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                                    : null;
+
+                                return (
+                                    <tr key={v.id} className={`hover:bg-blue-50 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-gray-900 text-sm md:text-base border-b border-gray-100 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{v.plateNumber}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 text-gray-700 font-medium text-sm md:text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                            {driver ? (driver.englishName ? `${driver.name} - ${driver.englishName}` : driver.name) : <span className="text-gray-400">غير معين</span>}
+                                        </td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-blue-600 text-sm md:text-base print:py-1.5 print:px-2 print:text-xs print:text-black">{tripCount}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 text-gray-700 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                            {lastMaintenance ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold">{lastMaintenance.date}</span>
+                                                    <span className="text-xs text-gray-500">{lastMaintenance.type === 'oil_change' ? 'تغيير زيت' : 'إصلاح'}</span>
+                                                </div>
+                                            ) : <span className="text-gray-400">-</span>}
+                                        </td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 text-gray-600 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                            {lastMaintenance?.notes || '-'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -884,6 +1433,28 @@ function ReportsContent() {
                     <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-bold border border-purple-200 print:border-purple-800 print:bg-white print:text-purple-800">
                         العدد: {(state.vehicles || []).length}
                     </span>
+                </div>
+
+                {/* Date Filter for Vehicle Report */}
+                <div className="px-8 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-6 print:hidden">
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-700">من تاريخ:</span>
+                        <input 
+                            type="date" 
+                            value={vehicleSearchStartDate} 
+                            onChange={(e) => setVehicleSearchStartDate(e.target.value)} 
+                            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-purple-500 bg-white shadow-sm"
+                        />
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-700">إلى تاريخ:</span>
+                        <input 
+                            type="date" 
+                            value={vehicleSearchEndDate} 
+                            onChange={(e) => setVehicleSearchEndDate(e.target.value)} 
+                            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-purple-500 bg-white shadow-sm"
+                        />
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -903,7 +1474,27 @@ function ReportsContent() {
                             {(state.vehicles || []).map((vehicle, idx) => {
                                 const regDays = daysRemaining(vehicle.registrationExpiry);
                                 const regColor = regDays === undefined ? 'text-gray-600' : regDays < 0 ? 'text-red-600' : regDays < 30 ? 'text-orange-600' : 'text-green-600';
-                                const hasViolations = (vehicle.violations?.length || 0) > 0;
+                                
+                                // Calculate filtered counts
+                                const maintenanceCount = (vehicle.maintenanceHistory || []).filter(m => {
+                                    if (!vehicleSearchStartDate && !vehicleSearchEndDate) return true;
+                                    const mDate = new Date(m.date);
+                                    const start = vehicleSearchStartDate ? new Date(vehicleSearchStartDate) : new Date(0);
+                                    const end = vehicleSearchEndDate ? new Date(vehicleSearchEndDate) : new Date(8640000000000000);
+                                    if (vehicleSearchEndDate) end.setHours(23, 59, 59, 999);
+                                    return mDate >= start && mDate <= end;
+                                }).length;
+
+                                const violationsCount = (vehicle.violations || []).filter(v => {
+                                    if (!vehicleSearchStartDate && !vehicleSearchEndDate) return true;
+                                    const vDate = new Date(v.date);
+                                    const start = vehicleSearchStartDate ? new Date(vehicleSearchStartDate) : new Date(0);
+                                    const end = vehicleSearchEndDate ? new Date(vehicleSearchEndDate) : new Date(8640000000000000);
+                                    if (vehicleSearchEndDate) end.setHours(23, 59, 59, 999);
+                                    return vDate >= start && vDate <= end;
+                                }).length;
+
+                                const hasViolations = violationsCount > 0;
                                 
                                 return (
                                     <tr key={vehicle.id} className={`hover:bg-purple-50/20 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30 print:bg-gray-50/50'}`}>
@@ -916,14 +1507,14 @@ function ReportsContent() {
                                         <td className="px-5 py-4 text-gray-700 font-medium text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{vehicle.type}</td>
                                         <td className="px-5 py-4 text-gray-700 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{vehicle.model}</td>
                                         <td className="px-5 py-4 text-gray-700 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200 font-mono">{vehicle.year}</td>
-                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs border-b border-gray-50 print:border-gray-200">{vehicle.maintenanceHistory?.length || 0}</td>
+                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs border-b border-gray-50 print:border-gray-200">{maintenanceCount}</td>
                                         <td className="px-5 py-4 font-bold text-base print:py-1.5 print:px-2 print:text-xs border-b border-gray-50 print:border-gray-200">
                                             <span className={hasViolations ? 'text-red-600 bg-red-50 px-2 py-0.5 rounded-full' : 'text-gray-400'}>
-                                                {vehicle.violations?.length || 0}
+                                                {violationsCount}
                                             </span>
                                         </td>
                                         <td className="px-5 py-4 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">
-                                            <span className={`font-bold ${regColor}`}>
+                                            <span className={`font-bold print:whitespace-nowrap ${regColor}`}>
                                                 {toDMY(vehicle.registrationExpiry || '')}
                                             </span>
                                             {vehicle.registrationExpiry && (
@@ -975,180 +1566,356 @@ function ReportsContent() {
         )}
 
         {view === 'violations' && (
-            <div className="space-y-6">
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm print:hidden">
-                    <div className="flex flex-col md:flex-row gap-4 items-center">
-                        <div className="flex-1 w-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">بحث عن مخالفات</label>
-                            <div className="relative">
-                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                <input 
-                                    type="text" 
-                                    value={violationSearch}
-                                    onChange={(e) => setViolationSearch(e.target.value)}
-                                    placeholder={violationSearchType === 'plate' ? "أدخل رقم اللوحة..." : "أدخل اسم السائق..."}
-                                    className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all"
-                                />
-                            </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 w-full flex flex-col overflow-visible animate-in fade-in zoom-in-95 print:block print:w-full print:h-auto print:max-h-none print:max-w-none print:shadow-none print:border-none print:bg-white print:animate-none">
+              <div className="flex justify-between items-center p-4 border-b bg-gray-50 rounded-t-xl print:hidden">
+                <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2 font-cairo">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                  بحث المخالفات المرورية
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => window.print()}
+                    className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2 font-bold"
+                    title="طباعة التقرير"
+                  >
+                    <Printer className="w-5 h-5" />
+                    <span className="hidden sm:inline">طباعة</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-4 border-b bg-white print:hidden space-y-4">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Driver Filter */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5" />
+                        فلتر حسب السائق
+                      </label>
+                      <SearchableSelect
+                        placeholder="ابحث باسم السائق..."
+                        options={workerOptions}
+                        value={violationSearchDriver || undefined}
+                        onChange={(val) => setViolationSearchDriver(val || '')}
+                      />
+                    </div>
+
+                    {/* Vehicle Filter */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5" />
+                        فلتر حسب المركبة
+                      </label>
+                      <SearchableSelect
+                        placeholder="جميع المركبات"
+                        options={vehicleOptions}
+                        value={violationSearchVehicle || undefined}
+                        onChange={(val) => setViolationSearchVehicle(val || '')}
+                      />
+                    </div>
+
+                    {/* Date Range Start */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            من تاريخ
+                        </label>
+                        <input 
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
+                            value={violationSearchStartDate}
+                            onChange={e => setViolationSearchStartDate(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Date Range End */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            إلى تاريخ
+                        </label>
+                        <input 
+                            type="date"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
+                            value={violationSearchEndDate}
+                            onChange={e => setViolationSearchEndDate(e.target.value)}
+                        />
+                    </div>
+                  </div>
+
+                  {/* Text Search */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">بحث عام</label>
+                    <div className="relative">
+                      <input 
+                        className="w-full px-3 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 text-sm font-bold"
+                        placeholder="ابحث برقم المخالفة أو ملاحظات..."
+                        value={violationSearchQuery}
+                        onChange={e => setViolationSearchQuery(e.target.value)}
+                      />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 bg-gray-50 rounded-b-xl print:p-0 print:bg-white print:overflow-visible print:block print:h-auto">
+                {/* Print Header */}
+                <div className="hidden print:block mb-6 border-b pb-4">
+                   <h1 className="text-2xl font-bold text-center mb-2 font-cairo">تقرير المخالفات المرورية</h1>
+                   <div className="flex justify-center gap-4 text-sm text-gray-600 font-bold flex-wrap">
+                     <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</span>
+                     {violationSearchStartDate && <span>من: {violationSearchStartDate}</span>}
+                     {violationSearchEndDate && <span>إلى: {violationSearchEndDate}</span>}
+                     {violationSearchDriver && <span>السائق: {state.workers.find(w => w.id === violationSearchDriver)?.name}</span>}
+                     {violationSearchVehicle && <span>المركبة: {state.vehicles?.find(v => v.id === violationSearchVehicle)?.plateNumber}</span>}
+                   </div>
+                </div>
+
+                {violationSearchResults.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-gray-400 print:hidden py-12">
+                    <p className="text-lg font-bold">لا توجد نتائج مطابقة</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                     {/* Summary Cards */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-6 print:mb-8 print:break-inside-avoid">
+                        <div className="bg-white p-6 rounded-xl border shadow-sm flex flex-col justify-between h-24 print:border print:shadow-none print:break-inside-avoid print:h-28 print:rounded-xl print:border-gray-200">
+                          <div className="text-sm text-gray-500 font-bold whitespace-nowrap text-right">إجمالي المخالفات</div>
+                          <div className="text-3xl font-bold text-gray-900 whitespace-nowrap text-left" dir="ltr">{violationSearchResults.length} مخالفة</div>
                         </div>
-                        <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    name="vSearchType"
-                                    checked={violationSearchType === 'plate'}
-                                    onChange={() => setViolationSearchType('plate')}
-                                    className="text-red-600 focus:ring-red-500"
-                                />
-                                <span className="text-sm font-medium text-gray-700">بحث برقم اللوحة</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    name="vSearchType"
-                                    checked={violationSearchType === 'driver'}
-                                    onChange={() => setViolationSearchType('driver')}
-                                    className="text-red-600 focus:ring-red-500"
-                                />
-                                <span className="text-sm font-medium text-gray-700">بحث اسم السائق</span>
-                            </label>
+                        <div className="bg-white p-6 rounded-xl border shadow-sm flex flex-col justify-between h-24 print:border print:shadow-none print:break-inside-avoid print:h-28 print:rounded-xl print:border-gray-200">
+                          <div className="text-sm text-gray-500 font-bold whitespace-nowrap text-right">إجمالي المبالغ المستحقة</div>
+                          <div className="text-3xl font-bold text-red-600 whitespace-nowrap text-left" dir="ltr">{violationSearchResults.reduce((sum, item) => sum + item.violation.cost, 0).toLocaleString()} ريال</div>
                         </div>
+                     </div>
+
+                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm print:border print:border-gray-200 print:shadow-none print:rounded-xl print:overflow-hidden">
+                        
+                        {/* Mobile Card View */}
+                        <div className="md:hidden grid grid-cols-1 divide-y divide-gray-100 print:hidden">
+                           {violationSearchResults.map((item, idx) => (
+                              <div key={`${item.violation.id}-${idx}-mobile`} className="p-4 flex flex-col gap-3">
+                                 <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-2">
+                                       <div className="p-2 bg-red-50 rounded-full text-red-600">
+                                          <AlertTriangle className="w-4 h-4" />
+                                       </div>
+                                       <div>
+                                          <div className="font-bold text-gray-900 text-sm">{item.violation.type}</div>
+                                          <div className="text-xs text-gray-500 font-mono">{item.violation.violationNumber || '-'}</div>
+                                       </div>
+                                    </div>
+                                    <div className="text-right">
+                                       <div className="font-bold text-red-600">{item.violation.cost.toLocaleString()} ريال</div>
+                                       <div className="text-xs text-gray-500">{item.violation.date}</div>
+                                    </div>
+                                 </div>
+
+                                 <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-2 rounded-lg">
+                                    <div>
+                                       <span className="text-gray-400 block mb-0.5">السائق</span>
+                                       <span className="font-bold text-gray-700">{item.violation.driverName || '-'}</span>
+                                    </div>
+                                    <div>
+                                       <span className="text-gray-400 block mb-0.5">المركبة</span>
+                                       <span className="font-bold text-gray-700">{item.vehicle.plateNumber}</span>
+                                    </div>
+                                    <div>
+                                       <span className="text-gray-400 block mb-0.5">المدينة</span>
+                                       <span className="font-bold text-gray-700">{item.violation.city || '-'}</span>
+                                    </div>
+                                    <div>
+                                       <span className="text-gray-400 block mb-0.5">الوقت</span>
+                                       <span className="font-bold text-gray-700">{item.violation.time || '-'}</span>
+                                    </div>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <table className="hidden md:table print:table w-full text-right print:text-xs print:mb-8 print:border-collapse">
+                          <thead className="bg-gray-50 text-gray-700 font-bold border-b print:bg-gray-100 print:border-b print:border-gray-200 print:table-header-group">
+                            <tr>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-right print:w-[250px] font-bold">اسم السائق</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-nowrap print:text-center">التاريخ والوقت</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-center">رقم المخالفة</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-center">نوع المخالفة</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-center">المدينة</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-center">رقم السيارة</th>
+                              <th className="px-4 py-4 whitespace-nowrap print:px-4 print:py-3 print:whitespace-normal print:text-center">القيمة</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 print:divide-gray-200">
+                            {violationSearchResults.map((item, idx) => (
+                              <tr key={`${item.violation.id}-${idx}`} className="hover:bg-blue-50 transition-colors group print:hover:bg-transparent break-inside-avoid print:border-b print:border-gray-200">
+                                <td className="px-4 py-4 print:px-4 print:py-3 print:align-top print:text-right">
+                                  {item.violation.driverName ? (
+                                    <div className="flex flex-col gap-1 print:items-start">
+                                      <div className="flex items-center gap-1.5 font-bold text-gray-900 group-hover:text-blue-700 hover:underline transition-colors print:text-sm print:break-words print:whitespace-normal">
+                                        <User className="w-4 h-4 text-gray-400 print:block" />
+                                        {item.violation.driverName}
+                                      </div>
+                                      {/* English Name - Always visible for print context */}
+                                      {(() => {
+                                        const worker = state.workers.find(w => w.id === item.violation.driverId);
+                                        return (
+                                          <div className="text-xs text-gray-500 font-bold hidden md:block print:block print:text-[10px] print:text-gray-500 print:uppercase font-bold print:break-words print:whitespace-normal print:leading-tight print:text-right w-full" dir="ltr">
+                                            {worker?.englishName || '-'}
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 font-bold">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-600 font-bold print:px-4 print:py-3 print:align-top print:text-center">
+                                  <div className="whitespace-nowrap text-gray-900">{item.violation.date}</div>
+                                  <div className="text-xs text-gray-400 print:text-gray-500 whitespace-nowrap" dir="ltr">{item.violation.time}</div>
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-900 print:px-4 print:py-3 print:align-top print:text-center">
+                                  <span className="font-mono font-bold group-hover:text-blue-700 transition-colors print:break-all">{item.violation.violationNumber || '-'}</span>
+                                </td>
+                                <td className="px-4 py-4 print:px-4 print:py-3 print:align-top print:text-center">
+                                  <div className="flex flex-col gap-1 print:items-center">
+                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-red-50 text-red-700 w-fit print:bg-red-50 print:text-red-700 print:break-words print:whitespace-normal">
+                                      {item.violation.type}
+                                    </span>
+                                    {item.violation.description && (
+                                      <span className="text-xs text-gray-500 max-w-[200px] truncate font-bold print:whitespace-normal print:max-w-[150px] print:text-gray-500 print:break-words">{item.violation.description}</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-900 font-bold print:px-4 print:py-3 print:align-top print:text-center">
+                                  <span className="print:break-words">{item.violation.city || '-'}</span>
+                                </td>
+                                <td className="px-4 py-4 text-sm text-gray-900 print:px-4 print:py-3 print:align-top print:text-center">
+                                  <div className="flex flex-col print:items-center" dir="ltr">
+                                    <span className="font-bold group-hover:text-blue-700 hover:underline transition-colors print:break-all text-gray-900">{item.vehicle.plateNumber}</span>
+                                    <span className="text-xs text-gray-500 font-bold print:break-words">{item.vehicle.type}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 font-bold text-red-600 print:px-4 print:py-3 print:align-top print:text-center">
+                                  {item.violation.cost.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                     </div>
+                  </div>
+                )}
+              </div>
+          </div>
+        )}
+
+        {view === 'maintenance' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
+                <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-yellow-50 print:bg-white print:border-b-2 print:border-yellow-800">
+                    <h2 className="text-xl font-bold text-yellow-700 flex items-center gap-2 print:text-black">
+                        <Wrench className="w-6 h-6" />
+                        تقرير الصيانة
+                    </h2>
+                    <div className="text-sm text-yellow-700 font-bold print:text-black">
+                        الفترة: {toDMY(maintenanceStartDate)} - {toDMY(maintenanceEndDate)}
                     </div>
                 </div>
 
-                <div className="space-y-8 print:space-y-8">
-                    {violationSearchType === 'plate' ? (
-                        (state.vehicles || [])
-                            .filter(v => !violationSearch || v.plateNumber.includes(violationSearch))
-                            .filter(v => (v.violations?.length || 0) > 0)
-                            .map(vehicle => (
-                                <div key={vehicle.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800 break-inside-avoid">
-                                    <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center justify-between print:bg-white print:border-b-2 print:border-gray-800">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2 bg-white rounded-lg border border-red-100 print:hidden">
-                                                <Car className="w-6 h-6 text-red-600" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-bold text-gray-900 print:text-black">{vehicle.plateNumber}</h3>
-                                                <p className="text-sm text-gray-500 print:text-gray-700">{vehicle.type} - {vehicle.model} ({vehicle.year})</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-left">
-                                            <div className="text-sm font-bold text-red-800 print:text-black bg-white px-3 py-1 rounded-lg border border-red-200 shadow-sm print:border-gray-400 print:shadow-none">
-                                                إجمالي الغرامات: <span className="text-red-600 print:text-black mx-1">{vehicle.violations.reduce((acc, v) => acc + (v.cost || 0), 0).toLocaleString()}</span> ريال
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-right border-collapse">
-                                            <thead className="bg-gray-100 text-gray-900 border-b-2 border-gray-300 print:bg-gray-200 print:text-black print:border-black">
-                                                <tr>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400 last:border-l-0">#</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">رقم المخالفة</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">التاريخ</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">نوع المخالفة</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">السائق</th>
-                                                    <th className="px-4 py-3 font-bold print:px-2 print:py-1 text-xs">التكلفة</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200">
-                                                {(vehicle.violations || []).map((v, vIdx) => (
-                                                    <tr key={v.id || vIdx} className="hover:bg-red-50/40 transition-colors even:bg-gray-50 print:even:bg-gray-100 print:hover:bg-transparent">
-                                                        <td className="px-4 py-3 text-gray-600 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-mono last:border-l-0 bg-gray-50/50">{vIdx + 1}</td>
-                                                        <td className="px-4 py-3 font-mono text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px]">{v.violationNumber || '-'}</td>
-                                                        <td className="px-4 py-3 text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-mono" dir="ltr">{v.date}</td>
-                                                        <td className="px-4 py-3 text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-bold">{v.type}</td>
-                                                        <td className="px-4 py-3 text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px]">{v.driverName || '-'}</td>
-                                                        <td className="px-4 py-3 font-bold text-red-700 print:text-black print:px-2 print:py-1 print:text-[10px]">{v.cost?.toLocaleString()} ريال</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            ))
-                    ) : (
-                        (() => {
-                            const driverMap = new Map();
-                            (state.vehicles || []).forEach(v => {
-                                (v.violations || []).forEach(vio => {
-                                    const dName = vio.driverName || 'غير معروف';
-                                    if (!violationSearch || dName.includes(violationSearch)) {
-                                        if (!driverMap.has(dName)) driverMap.set(dName, []);
-                                        driverMap.get(dName).push({ ...vio, vehiclePlate: v.plateNumber, vehicleType: v.type });
-                                    }
-                                });
-                            });
-                            
-                            if (driverMap.size === 0) return <div className="text-center py-16 text-gray-500 border-2 border-dashed border-gray-200 rounded-xl">لا توجد مخالفات لهذا السائق</div>;
+                <div className="overflow-x-auto">
+                    <table className="w-full text-right border-separate border-spacing-0">
+                        <thead className="bg-gray-100 print:bg-gray-100">
+                            <tr>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">رقم اللوحة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">نوع المركبة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">تاريخ الصيانة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">نوع الصيانة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">التكلفة</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                            {(() => {
+                                let totalCost = 0;
+                                let count = 0;
+                                const rows = (state.vehicles || []).flatMap(v => 
+                                    (v.maintenanceHistory || []).filter(m => m.date >= maintenanceStartDate && m.date <= maintenanceEndDate).map(m => ({ v, m }))
+                                );
 
-                            return Array.from(driverMap.entries()).map(([driverName, violations]) => (
-                                <div key={driverName} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800 break-inside-avoid">
-                                    <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center justify-between print:bg-white print:border-b-2 print:border-gray-800">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2 bg-white rounded-lg border border-red-100 print:hidden">
-                                                <Users className="w-6 h-6 text-red-600" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-lg font-bold text-gray-900 print:text-black">السائق: {driverName}</h3>
-                                                <p className="text-sm text-gray-500 print:text-gray-700">عدد المخالفات: {violations.length}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-left">
-                                            <div className="text-sm font-bold text-red-800 print:text-black bg-white px-3 py-1 rounded-lg border border-red-200 shadow-sm print:border-gray-400 print:shadow-none">
-                                                إجمالي الغرامات: <span className="text-red-600 print:text-black mx-1">{violations.reduce((acc: any, v: any) => acc + (v.cost || 0), 0).toLocaleString()}</span> ريال
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-right border-collapse">
-                                            <thead className="bg-gray-100 text-gray-900 border-b-2 border-gray-300 print:bg-gray-200 print:text-black print:border-black">
-                                                <tr>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400 last:border-l-0">#</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">المركبة</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">رقم المخالفة</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">التاريخ</th>
-                                                    <th className="px-4 py-3 font-bold border-l border-gray-300 print:px-2 print:py-1 text-xs print:border-gray-400">نوع المخالفة</th>
-                                                    <th className="px-4 py-3 font-bold print:px-2 print:py-1 text-xs">التكلفة</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200">
-                                                {violations.map((v: any, vIdx: number) => (
-                                                    <tr key={v.id || vIdx} className="hover:bg-red-50/40 transition-colors even:bg-gray-50 print:even:bg-gray-100 print:hover:bg-transparent">
-                                                        <td className="px-4 py-3 text-gray-600 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-mono last:border-l-0 bg-gray-50/50">{vIdx + 1}</td>
-                                                        <td className="px-4 py-3 font-bold text-gray-900 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px]">
-                                                            <div className="flex flex-col">
-                                                                <span>{v.vehiclePlate}</span>
-                                                                <span className="text-xs text-gray-500 font-normal">{v.vehicleType}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 font-mono text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px]">{v.violationNumber || '-'}</td>
-                                                        <td className="px-4 py-3 text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-mono" dir="ltr">{v.date}</td>
-                                                        <td className="px-4 py-3 text-gray-800 border-l border-gray-200 print:border-gray-300 print:px-2 print:py-1 print:text-[10px] font-bold">{v.type}</td>
-                                                        <td className="px-4 py-3 font-bold text-red-700 print:text-black print:px-2 print:py-1 print:text-[10px]">{v.cost?.toLocaleString()} ريال</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            ));
-                        })()
-                    )}
+                                if (rows.length === 0) {
+                                    return (
+                                        <tr>
+                                            <td colSpan={6} className="px-5 py-16 text-center text-gray-500">
+                                                <Wrench className="w-16 h-16 mx-auto text-gray-200 mb-4" />
+                                                <p className="text-lg font-medium">لا توجد سجلات صيانة في هذه الفترة</p>
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
+                                return rows.map(({ v, m }, idx) => {
+                                    totalCost += Number(m.cost) || 0;
+                                    count++;
+                                    const mType = m.type === 'oil_change' ? 'تغيير زيت' : (m.type === 'repair' ? 'إصلاح' : 'أخرى');
+                                    return (
+                                        <tr key={m.id} className={`hover:bg-yellow-50/20 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30 print:bg-gray-50/50'}`}>
+                                            <td className="px-5 py-4 font-bold text-gray-900 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{v.plateNumber}</td>
+                                            <td className="px-5 py-4 text-gray-700 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{v.type}</td>
+                                            <td className="px-5 py-4 text-gray-900 font-bold text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200" dir="ltr">{m.date}</td>
+                                            <td className="px-5 py-4 text-yellow-700 font-bold text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{mType}</td>
+                                            <td className="px-5 py-4 text-yellow-700 font-bold text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{m.cost}</td>
+                                            <td className="px-5 py-4 text-gray-600 text-sm print:py-1.5 print:px-2 print:text-xs print:whitespace-normal border-b border-gray-50 print:border-gray-200">{m.notes || '-'}</td>
+                                        </tr>
+                                    );
+                                });
+                            })()}
+                        </tbody>
+                        <tfoot className="bg-gray-50 font-bold print:bg-white print:table-footer-group">
+                             {(() => {
+                                let totalCost = 0;
+                                let count = 0;
+                                (state.vehicles || []).forEach(v => {
+                                    (v.maintenanceHistory || []).forEach(m => {
+                                        if (m.date >= maintenanceStartDate && m.date <= maintenanceEndDate) {
+                                            totalCost += Number(m.cost) || 0;
+                                            count++;
+                                        }
+                                    });
+                                });
+
+                                return (
+                                    <tr>
+                                        <td colSpan={4} style={{ borderTop: '3px solid black' }} className="px-5 py-4 text-left text-gray-800 font-black border-t-2 border-gray-400 print:!border-black print:!border-t-[3px] print:text-black print:py-3 print:px-2 print:text-sm print:text-left whitespace-nowrap">الإجمالي ({count} عملية صيانة):</td>
+                                        <td style={{ borderTop: '3px solid black' }} className="px-5 py-4 text-center text-yellow-800 font-black text-xl border-t-2 border-gray-400 print:!border-black print:!border-t-[3px] print:text-black print:py-3 print:px-2 print:text-sm print:text-center">{totalCost}</td>
+                                        <td style={{ borderTop: '3px solid black' }} className="px-5 py-4 border-t-2 border-gray-400 print:!border-black print:!border-t-[3px]"></td>
+                                    </tr>
+                                );
+                            })()}
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         )}
 
+
+
         {view === 'projects' ? (
             <div className="space-y-8 print:space-y-8">
-                {data.map(({ site, workers, counts, driver, engineer }, idx) => (
+                {(selectedProjectId ? data.filter(d => d.site.id === selectedProjectId) : data).map(({ site, workers, counts, driver, engineer }, idx) => (
                 <section key={site.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:overflow-visible print:shadow-none print:border-0 print:m-0 print:p-0 print:w-full print:h-auto print:block" style={{ pageBreakAfter: 'always' }}>
                     
                     {/* Header Section */}
-                    <div className="bg-gray-900 text-white p-6 flex flex-col md:flex-row md:items-start justify-between gap-6 print:bg-white print:text-black print:border-b-2 print:border-gray-800 print:p-4 print:mb-2 break-inside-avoid">
+                    <div className="bg-gray-900 text-white p-4 md:p-6 flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-6 print:bg-white print:text-black print:border-b-2 print:border-gray-800 print:p-4 print:mb-2 break-inside-avoid">
                         <div className="flex-1">
-                            <div className="flex items-center gap-4 mb-3 print:mb-2">
-                                <h2 className="text-2xl font-bold text-white print:text-black print:text-xl">{site.name}</h2>
+                            <div className="flex items-center gap-3 md:gap-4 mb-2 md:mb-3 print:mb-2">
+                                <div className="flex items-center gap-3">
+                                    {site.code && <span className="text-base md:text-lg font-bold text-gray-400 bg-gray-800/50 px-2.5 md:px-3 py-0.5 md:py-1 rounded-lg border border-gray-700 print:bg-gray-100 print:text-black print:border-gray-300 print:text-base">{site.code}</span>}
+                                    <h2 className="text-xl md:text-2xl font-bold text-white print:text-black print:text-xl">{site.name}</h2>
+                                </div>
                                 <span className={`px-3 py-1 rounded-full text-sm font-bold border print:border-2 print:text-xs print:px-2 print:py-0.5 ${
                                     site.status === 'completed' ? 'bg-blue-900 text-blue-100 border-blue-700 print:text-blue-800 print:bg-white print:border-blue-800' :
                                     site.status === 'stopped' ? 'bg-red-900 text-red-100 border-red-700 print:text-red-800 print:bg-white print:border-red-800' :
@@ -1159,7 +1926,7 @@ function ReportsContent() {
                                      'جاري العمل'}
                                 </span>
                             </div>
-                            <p className="text-base text-gray-300 font-medium mb-4 print:text-gray-700 print:text-xs print:mb-1 flex items-center gap-2">
+                            <p className="text-sm md:text-base text-gray-300 font-medium mb-3 md:mb-4 print:text-gray-700 print:text-xs print:mb-1 flex items-center gap-2">
                                 <span className="print:hidden">📍</span>
                                 {site.location}
                             </p>
@@ -1172,63 +1939,95 @@ function ReportsContent() {
                             )}
                         </div>
 
-                        <div className="flex flex-col gap-3 min-w-[300px] print:min-w-0 print:grid print:grid-cols-3 print:gap-4 print:items-center print:w-full print:mt-2">
-                            {/* Manager Block - Blue Theme */}
-                            <div className="flex items-center justify-between bg-gray-800/50 px-4 py-3 rounded-lg border border-gray-700 print:bg-blue-50 print:border print:border-blue-200 print:p-2 print:block print:text-center print:shadow-sm">
+                        <div className="flex flex-col gap-2 md:gap-3 min-w-0 md:min-w-[300px] print:min-w-0 print:grid print:grid-cols-3 print:gap-4 print:items-center print:w-full print:mt-2">
+                            <div className="flex items-center justify-between bg-gray-800/50 px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-700 print:bg-blue-50 print:border print:border-blue-200 print:p-2 print:block print:text-center print:shadow-sm">
                                 <span className="text-gray-400 text-sm font-medium print:text-blue-800 print:text-xs print:block print:mb-1 print:font-bold">المسؤول</span>
-                                <span className="font-bold text-white text-lg print:text-blue-950 print:text-xs block">
+                                <span className="font-bold text-white text-base md:text-lg print:text-blue-950 print:text-xs block">
                                     {engineer ? (
                                         <>
                                             <span className="block">{engineer.name}</span>
-                                            {engineer.englishName && <span className="block text-gray-300 text-sm font-normal mt-0.5 print:text-[10px] print:text-blue-900">{engineer.englishName}</span>}
+                                            {engineer.englishName && <span className="block text-black text-xs md:text-sm font-normal mt-0.5 print:text-[10px] print:text-blue-900">{engineer.englishName}</span>}
                                         </>
                                     ) : 'بدون'}
                                 </span>
                             </div>
-                            {/* Driver Block - Orange Theme */}
-                            <div className="flex items-center justify-between bg-gray-800/50 px-4 py-3 rounded-lg border border-gray-700 print:bg-orange-50 print:border print:border-orange-200 print:p-2 print:block print:text-center print:shadow-sm">
-                                <span className="text-gray-400 text-sm font-medium print:text-orange-800 print:text-xs print:block print:mb-1 print:font-bold">السائق</span>
-                                <span className="font-bold text-white text-base print:text-orange-950 print:text-xs block">
-                                    {driver ? (
-                                        <>
-                                            <span className="block">{driver.name}</span>
-                                            {driver.englishName && <span className="block text-gray-300 text-sm font-normal mt-0.5 print:text-[10px] print:text-orange-900">{driver.englishName}</span>}
-                                            {(driver.driverCarType || driver.driverCarPlate) && <span className="text-gray-400 text-xs mt-1 print:text-orange-800 print:text-[10px] block">{driver.driverCarType ? `(${driver.driverCarType})` : ''} {driver.driverCarPlate ? `[${driver.driverCarPlate}]` : ''}</span>}
-                                        </>
-                                    ) : 'بدون'}
+                            <div className="flex items-center justify-between bg-gray-800/50 px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-700 print:bg-orange-50 print:border print:border-orange-200 print:p-2 print:block print:text-center print:shadow-sm">
+                                <span className="text-gray-400 text-sm font-medium print:text-orange-800 print:text-xs print:block print:mb-1 print:font-bold">السائقين</span>
+                                <span className="font-bold text-white text-sm md:text-base print:text-orange-950 print:text-xs block">
+                                    {(() => {
+                                        const driversToDisplay = site.assignedDrivers && site.assignedDrivers.length > 0
+                                            ? site.assignedDrivers
+                                            : (site.driverId ? [{ driverId: site.driverId, count: site.driverTransportCount || 0 }] : []);
+
+                                        if (!driversToDisplay || driversToDisplay.length === 0) {
+                                            return 'بدون';
+                                        }
+
+                                        return (
+                                            <>
+                                                {driversToDisplay.length > 1 && (
+                                                    <span className="block text-xs md:text-sm font-semibold text-gray-200 mb-1 print:text-orange-900 print:text-[10px]">
+                                                        عدد السائقين: {driversToDisplay.length}
+                                                    </span>
+                                                )}
+                                                {driversToDisplay.map((ad: { driverId: string; count?: number }, idx: number) => {
+                                                    const d = state.workers.find(w => w.id === ad.driverId);
+                                                    if (!d) return null;
+
+                                                    let line = d.name;
+                                                    if (d.englishName) line += ` (${d.englishName})`;
+                                                    if (d.driverCarType) line += ` - ${d.driverCarType}`;
+                                                    if (d.driverCarPlate) line += ` - ${d.driverCarPlate}`;
+                                                    if (ad.count) {
+                                                        line += ` - ينقل: ${ad.count}`;
+                                                    } else if (typeof d.driverCapacity === 'number') {
+                                                        line += ` - سعة: ${d.driverCapacity}`;
+                                                    }
+
+                                                    return (
+                                                        <span
+                                                            key={`${ad.driverId}-${idx}`}
+                                                            className="block text-xs md:text-sm font-normal text-gray-100 print:text-orange-900 print:text-[10px]"
+                                                        >
+                                                            {line}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    })()}
                                 </span>
                             </div>
-                            {/* Worker Count Block - Green Theme */}
-                            <div className="flex items-center justify-between bg-gray-800/50 px-4 py-3 rounded-lg border border-gray-700 print:bg-green-50 print:border print:border-green-200 print:p-2 print:block print:text-center print:shadow-sm">
+                            <div className="flex items-center justify-between bg-gray-800/50 px-3 md:px-4 py-2 md:py-3 rounded-lg border border-gray-700 print:bg-green-50 print:border print:border-green-200 print:p-2 print:block print:text-center print:shadow-sm">
                                 <span className="text-gray-400 text-sm font-medium print:text-green-800 print:text-xs print:block print:mb-1 print:font-bold">عدد العمال</span>
-                                <span className="font-bold text-white text-xl print:text-green-950 print:text-lg">{workers.length}</span>
+                                <span className="font-bold text-white text-lg md:text-xl print:text-green-950 print:text-lg">{workers.length}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="p-6 print:p-2 print:flex-1">
+                    <div className="p-4 md:p-6 print:p-2 print:flex-1">
                         <div className="mb-6 print:mb-2 break-inside-avoid">
-                            <h3 className="text-base font-bold text-gray-800 mb-3 print:text-black border-b pb-2 print:text-xs print:mb-1">توزيع المهن:</h3>
-                            <div className="flex flex-wrap gap-2 print:gap-1">
+                            <h3 className="text-sm md:text-base font-bold text-gray-800 mb-2 md:mb-3 print:text-black border-b pb-2 print:text-xs print:mb-1">توزيع المهن:</h3>
+                            <div className="flex flex-wrap gap-1.5 md:gap-2 print:gap-1">
                                 {state.skills.filter(sk => (counts[sk.name] || 0) > 0).map(sk => (
-                                <span key={sk.id} className={`text-sm font-bold px-3 py-1.5 rounded-lg border flex items-center gap-2 print:border-gray-300 print:bg-white print:text-black print:text-[10px] print:px-1.5 print:py-0.5 ${sk.color}`}>
-                                    <span className="w-2.5 h-2.5 rounded-full bg-current opacity-75 print:border print:border-black print:w-1.5 print:h-1.5"></span>
+                                <span key={sk.id} className={`text-xs md:text-sm font-bold px-2.5 md:px-3 py-1 md:py-1.5 rounded-lg border flex items-center gap-1.5 md:gap-2 print:border-gray-300 print:bg-white print:text-black print:text-[10px] print:px-1.5 print:py-0.5 ${sk.color}`}>
+                                    <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-current opacity-75 print:border print:border-black print:w-1.5 print:h-1.5"></span>
                                     {sk.label}: {counts[sk.name]}
                                 </span>
                                 ))}
                             </div>
                         </div>
 
-                        <div className="overflow-hidden print:overflow-visible rounded-lg border border-gray-200 print:border-gray-300">
-                            <table className="w-full text-right border-collapse">
+                        <div className="overflow-x-auto md:overflow-hidden print:overflow-visible rounded-lg border border-gray-200 print:border-gray-300">
+                            <table className="w-full table-auto md:table-fixed text-right border-collapse">
                                 <thead className="bg-gray-100 print:bg-gray-100">
                                     <tr>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الكود</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الاسم</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">المهنة</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">رقم الإقامة</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الجوال</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">انتهاء الإقامة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الكود</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الاسم</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">المهنة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal hidden md:table-cell">رقم الإقامة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal hidden md:table-cell">الجوال</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">انتهاء الإقامة</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1237,21 +2036,21 @@ function ReportsContent() {
                                     const skLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
                                     return (
                                     <tr key={w.id} className={`hover:bg-blue-50/50 print:hover:bg-transparent break-inside-avoid ${wIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50 print:bg-gray-50/50'}`}>
-                                        <td className="px-5 py-4 font-mono text-gray-500 text-sm font-bold print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">{w.code || '-'}</td>
-                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-500 text-xs md:text-sm font-bold print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">{w.code || '-'}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-gray-900 text-sm md:text-base print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">
                                             <Link href={`/workers?search=${encodeURIComponent(w.name)}`} className="hover:text-blue-600 hover:underline block">
                                                 {w.name}
                                             </Link>
-                                            {w.englishName && <span className="block text-black text-sm font-normal mt-0.5 print:text-[9px] print:text-black">{w.englishName}</span>}
+                                            {w.englishName && <span className="block text-black text-xs md:text-sm font-normal mt-0.5 print:text-[9px] print:text-black">{w.englishName}</span>}
                                         </td>
-                                        <td className="px-5 py-4 print:py-1 print:px-1">
-                                            <span className="bg-white border border-gray-200 text-gray-800 px-3 py-1 rounded-md text-sm font-bold shadow-sm print:shadow-none print:border-gray-300 print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap">{skLabel}</span>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 print:py-1 print:px-1">
+                                            <span className="bg-white border border-gray-200 text-gray-800 px-2.5 md:px-3 py-0.5 md:py-1 rounded-md text-xs md:text-sm font-bold shadow-sm print:shadow-none print:border-gray-300 print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap">{skLabel}</span>
                                         </td>
-                                        <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1 print:px-1 print:text-[10px]">{w.iqamaNumber}</td>
-                                        <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1 print:px-1 print:text-[10px]" dir="ltr">{w.phone}</td>
-                                        <td className="px-5 py-4 print:py-1 print:px-1">
-                                            <span className={`px-3 py-1 rounded-md text-sm font-bold border ${statusClasses(iqDays)} print:border-gray-300 print:bg-white print:text-black print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap`}>
-                                                {labelFor(iqDays, !!w.iqamaExpiry)} <span className="font-mono font-normal text-xs ml-1 print:text-[9px]">({w.iqamaExpiry})</span>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium print:py-1 print:px-1 print:text-[10px] hidden md:table-cell">{w.iqamaNumber}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium print:py-1 print:px-1 print:text-[10px] hidden md:table-cell" dir="ltr">{w.phone}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 print:py-1 print:px-1">
+                                            <span className={`px-2.5 md:px-3 py-0.5 md:py-1 rounded-md text-xs md:text-sm font-bold border ${statusClasses(iqDays)} print:border-gray-300 print:bg-white print:text-black print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap`}>
+                                                {labelFor(iqDays, !!w.iqamaExpiry)} <span className="font-mono font-normal text-[10px] md:text-xs ml-1 print:text-[9px]">({w.iqamaExpiry})</span>
                                             </span>
                                         </td>
                                     </tr>
@@ -1267,7 +2066,7 @@ function ReportsContent() {
                 {/* Waiting List Removed */}
 
                 {/* Rest List Section */}
-                {realLeaveData.length > 0 && (
+                {!selectedProjectId && realLeaveData.length > 0 && (
                 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:overflow-visible print:shadow-none print:border-0 print:m-0 print:p-0 print:w-full print:h-auto print:block" style={{ pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
                     <div className="bg-gray-600 text-white p-6 flex items-center justify-between gap-6 print:bg-white print:text-black print:border-b-2 print:border-gray-600 print:p-4 print:mb-2">
                         <div className="flex items-center gap-4">
@@ -1277,17 +2076,17 @@ function ReportsContent() {
                              </span>
                         </div>
                     </div>
-                    <div className="p-6 print:p-2">
-                         <div className="overflow-hidden print:overflow-visible rounded-lg border border-gray-200 print:border-gray-300">
-                            <table className="w-full text-right border-collapse">
+                    <div className="p-4 md:p-6 print:p-2">
+                         <div className="overflow-x-auto md:overflow-hidden print:overflow-visible rounded-lg border border-gray-200 print:border-gray-300">
+                            <table className="w-full table-auto md:table-fixed text-right border-collapse">
                                 <thead className="bg-gray-100 print:bg-gray-100">
                                     <tr>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الكود</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الاسم</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">المهنة</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">نوع الإجازة</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">تاريخ العودة</th>
-                                        <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الجوال</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الكود</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">الاسم</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">المهنة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">نوع الإجازة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">تاريخ العودة</th>
+                                        <th className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:py-1 print:px-1 print:text-[10px] print:whitespace-normal hidden md:table-cell">الجوال</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1300,19 +2099,19 @@ function ReportsContent() {
                                     
                                     return (
                                     <tr key={w.id} className={`hover:bg-gray-50/50 print:hover:bg-transparent ${wIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50 print:bg-gray-50/50'}`}>
-                                        <td className="px-5 py-4 font-mono text-gray-500 text-sm font-bold print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">{w.code || '-'}</td>
-                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-500 text-xs md:text-sm font-bold print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">{w.code || '-'}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-bold text-gray-900 text-sm md:text-base print:py-1 print:px-1 print:text-[10px] print:whitespace-normal">
                                             <Link href={`/workers?search=${encodeURIComponent(w.name)}`} className="hover:text-gray-600 hover:underline block">
                                                 {w.name}
                                             </Link>
-                                            {w.englishName && <span className="block text-black text-sm font-normal mt-0.5 print:text-[9px] print:text-black">{w.englishName}</span>}
+                                            {w.englishName && <span className="block text-black text-xs md:text-sm font-normal mt-0.5 print:text-[9px] print:text-black">{w.englishName}</span>}
                                         </td>
-                                        <td className="px-5 py-4 print:py-1 print:px-1">
-                                            <span className="bg-white border border-gray-200 text-gray-800 px-3 py-1 rounded-md text-sm font-bold shadow-sm print:shadow-none print:border-gray-300 print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap">{skLabel}</span>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 print:py-1 print:px-1">
+                                            <span className="bg-white border border-gray-200 text-gray-800 px-2.5 md:px-3 py-0.5 md:py-1 rounded-md text-xs md:text-sm font-bold shadow-sm print:shadow-none print:border-gray-300 print:text-[10px] print:px-1 print:py-0 print:whitespace-nowrap">{skLabel}</span>
                                         </td>
-                                        <td className="px-5 py-4 text-sm font-medium text-gray-700 print:py-1 print:px-1 print:text-[10px]">{currentLeave ? currentLeave.type : 'راحة'}</td>
-                                        <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1 print:px-1 print:text-[10px]">{currentLeave ? currentLeave.endDate : '-'}</td>
-                                        <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1 print:px-1 print:text-[10px]" dir="ltr">{w.phone}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 text-xs md:text-sm font-medium text-gray-700 print:py-1 print:px-1 print:text-[10px]">{currentLeave ? currentLeave.type : 'راحة'}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium print:py-1 print:px-1 print:text-[10px]">{currentLeave ? currentLeave.endDate : '-'}</td>
+                                        <td className="px-2 md:px-5 py-2 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium print:py-1 print:px-1 print:text-[10px] hidden md:table-cell" dir="ltr">{w.phone}</td>
                                     </tr>
                                     );
                                 })}
@@ -1340,6 +2139,28 @@ function ReportsContent() {
                         العدد: {state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق').length}
                     </span>
                 </div>
+
+                {/* Date Filter for Driver Report */}
+                <div className="px-8 py-4 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-6 print:hidden">
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-700">من تاريخ:</span>
+                        <input 
+                            type="date" 
+                            value={driverSearchStartDate} 
+                            onChange={(e) => setDriverSearchStartDate(e.target.value)} 
+                            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500 bg-white shadow-sm"
+                        />
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-700">إلى تاريخ:</span>
+                        <input 
+                            type="date" 
+                            value={driverSearchEndDate} 
+                            onChange={(e) => setDriverSearchEndDate(e.target.value)} 
+                            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500 bg-white shadow-sm"
+                        />
+                    </div>
+                </div>
                 
                 <div className="overflow-x-auto">
                     <table className="w-full text-right border-separate border-spacing-0">
@@ -1351,6 +2172,7 @@ function ReportsContent() {
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">عدد المواقع</th>
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">إجمالي المنقولين</th>
                                 <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">تفاصيل المواقع</th>
+                                <th className="px-5 py-4 text-sm font-bold text-gray-800 text-center border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs print:text-center">صيانة السيارة</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -1364,9 +2186,31 @@ function ReportsContent() {
                                     return { name: s.name, count };
                                 });
 
+                                // Check Maintenance Status
+                                const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
+                                const hasMaintenance = vehicle?.maintenanceHistory?.some(m => {
+                                    if (!driverSearchStartDate && !driverSearchEndDate) return true; // Show all if no filter
+                                    const mDate = new Date(m.date);
+                                    const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                    // Set end date to end of day
+                                    const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                    if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+                                    
+                                    return mDate >= start && mDate <= end;
+                                });
+
                                 return (
                                     <tr key={d.id} className={`hover:bg-indigo-50/20 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50 print:bg-gray-50/50'}`}>
-                                        <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{d.name}</td>
+                                        <td className="px-5 py-4 text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-gray-900">{d.name}</span>
+                                                {d.englishName && (
+                                                    <span className="text-xs text-black font-bold mt-1 text-left block" dir="ltr">
+                                                        {d.englishName}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-5 py-4 font-mono text-gray-700 text-base font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal" dir="ltr">{d.phone}</td>
                                         <td className="px-5 py-4 text-sm text-gray-600 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
                                             <div>{d.driverCarType}</div>
@@ -1385,6 +2229,19 @@ function ReportsContent() {
                                                 ))}
                                                 {sitesDetails.length === 0 && <span className="text-gray-400 italic">لا يوجد مواقع</span>}
                                             </div>
+                                        </td>
+                                        <td className="px-5 py-4 text-center print:py-1.5 print:px-2 print:text-xs">
+                                            {hasMaintenance ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 print:bg-white print:border-black print:text-black">
+                                                    <Wrench className="w-3 h-3 print:hidden" />
+                                                    يوجد
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 print:bg-white print:border-gray-400 print:text-gray-400">
+                                                    <X className="w-3 h-3 print:hidden" />
+                                                    لا يوجد
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -1409,7 +2266,7 @@ function ReportsContent() {
                                         <td colSpan={3} className="px-5 py-4 text-left text-gray-800 font-black border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm">الإجمالي الكلي:</td>
                                         <td className="px-5 py-4 text-center text-indigo-800 font-black text-xl border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center">{grandTotalSites}</td>
                                         <td className="px-5 py-4 text-center text-indigo-800 font-black text-xl border-t-2 border-gray-400 print:border-t-[3px] print:border-black print:text-black print:py-3 print:px-2 print:text-sm print:text-center">{grandTotalTransported}</td>
-                                        <td className="px-5 py-4 border-t-2 border-gray-400 print:border-t-[3px] print:border-black"></td>
+                                        <td colSpan={2} className="px-5 py-4 border-t-2 border-gray-400 print:border-t-[3px] print:border-black"></td>
                                     </tr>
                                 );
                             })()}
@@ -1419,6 +2276,11 @@ function ReportsContent() {
             </div>
         ) : view === 'absence' ? (
             <div className="space-y-6">
+                <style dangerouslySetInnerHTML={{__html: `
+                    @media print {
+                        @page { size: landscape; margin: 10mm; }
+                    }
+                `}} />
                 {/* Absence Stats Dashboard */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 print:p-4 print:border-gray-800 break-inside-avoid">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -1506,20 +2368,36 @@ function ReportsContent() {
                 </div>
 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-right border-separate border-spacing-0">
+                <div className="overflow-x-auto md:overflow-visible">
+                    <table className="w-full table-auto md:table-fixed text-right border-separate border-spacing-0">
+                        <colgroup>
+                            <col style={{ width: '4%' }} />   {/* # */}
+                            <col style={{ width: '7%' }} />   {/* الكود */}
+                            <col style={{ width: '18%' }} />  {/* اسم العامل */}
+                            <col style={{ width: '11%' }} />  {/* المهنة */}
+                            <col style={{ width: '11%' }} />  {/* رقم الجوال */}
+                            <col style={{ width: '10%' }} />  {/* تاريخ الغياب */}
+                            <col style={{ width: '14%' }} />  {/* سبب الغياب */}
+                            <col style={{ width: '9%' }} />   {/* سُجل بواسطة */}
+                            <col style={{ width: '12%' }} />  {/* المشروع المرتبط */}
+                            <col style={{ width: '4%' }} />   {/* إجراءات */}
+                        </colgroup>
                         <thead className="bg-gray-100 print:bg-gray-100">
                             <tr>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs w-16 text-center">#</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs">الكود</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">اسم العامل</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">المهنة</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">رقم الجوال</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">تاريخ الغياب</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">سبب الغياب</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">سُجل بواسطة</th>
-                                <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 print:whitespace-normal print:py-2 print:px-2 print:text-xs">المشروع المرتبط</th>
-                                {user?.role === 'admin' && <th className="px-5 py-4 text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 last:rounded-tl-lg print:hidden">إجراءات</th>}
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg print:whitespace-normal print:py-2 print:px-2 print:text-xs w-16 text-center">#</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 first:rounded-tr-lg last:rounded-tl-lg whitespace-nowrap print:whitespace-nowrap print:py-2 print:px-2 print:text-xs">الكود</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 break-words print:whitespace-normal print:py-2 print:px-2 print:text-xs">اسم العامل</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 whitespace-nowrap print:whitespace-nowrap print:py-2 print:px-2 print:text-xs">المهنة</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 whitespace-nowrap print:whitespace-nowrap print:py-2 print:px-2 print:text-xs hidden md:table-cell">رقم الجوال</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 whitespace-nowrap print:whitespace-nowrap print:py-2 print:px-2 print:text-xs">تاريخ الغياب</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 break-words print:whitespace-normal print:py-2 print:px-2 print:text-xs">سبب الغياب</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 whitespace-nowrap print:whitespace-nowrap print:py-2 print:px-2 print:text-xs hidden md:table-cell">سُجل بواسطة</th>
+                                <th className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 break-words print:whitespace-normal print:py-2 print:px-2 print:text-xs">المشروع المرتبط</th>
+                                {user?.role === 'admin' && (
+                                    <th className="px-2 md:px-4 md:pl-6 py-2 md:py-4 text-xs md:text-sm font-bold text-gray-800 border-b border-gray-300 print:border-gray-400 last:rounded-tl-lg print:hidden hidden md:table-cell text-center whitespace-nowrap min-w-[90px]">
+                                        إجراءات
+                                    </th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -1535,43 +2413,50 @@ function ReportsContent() {
                                         
                                         return (
                                             <tr key={`${w.id}-${h.date}-${idx}`} className="hover:bg-rose-50/20 transition-colors">
-                                                <td className="px-5 py-4 font-mono font-bold text-gray-500 text-sm text-center border-l border-gray-100 print:border-gray-300 print:py-1.5 print:px-2 print:text-xs">{idx + 1}</td>
-                                            <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{w.code || '-'}</td>
-                                                <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{w.name}</td>
-                                                <td className="px-5 py-4 text-sm text-gray-700 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                                <td className="px-2 py-2 md:px-5 md:py-4 font-mono font-bold text-gray-500 text-xs md:text-sm text-center border-l border-gray-100 print:border-gray-300 print:py-1.5 print:px-2 print:text-xs">{idx + 1}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap">{w.code || '-'}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 text-sm md:text-base break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-gray-900">{w.name}</span>
+                                                        {w.englishName && (
+                                                            <span className="text-[11px] text-black font-semibold mt-0.5 text-left" dir="ltr">
+                                                                {w.englishName}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-700 whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap">
                                                     <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{skLabel}</span>
                                                 </td>
-                                                <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal" dir="ltr">{w.phone}</td>
-                                                <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal" dir="ltr">{new Date(h.date).toLocaleDateString('en-GB')}</td>
-                                                <td className="px-5 py-4 text-sm text-gray-600 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{h.reason || '-'}</td>
-                                                <td className="px-5 py-4 text-sm text-gray-900 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{h.recordedBy || '-'}</td>
-                                                <td className="px-5 py-4 text-sm font-bold text-gray-900 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{assignedSite ? assignedSite.name : 'غير موزع'}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap hidden md:table-cell" dir="ltr">{w.phone}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap" dir="ltr">{new Date(h.date).toLocaleDateString('en-GB')}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-600 break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{h.reason || '-'}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-900 whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap hidden md:table-cell">{h.recordedBy || '-'}</td>
+                                                <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-900 break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{assignedSite ? assignedSite.name : 'غير موزع'}</td>
                                                 {user?.role === 'admin' && (
-                                                    <td className="px-5 py-4 text-sm print:hidden">
-                                                        <div className="flex items-center gap-2">
-                                                            <button 
-                                                                onClick={() => {
-                                                                    setEditingAbsence({
-                                                                        workerId: w.id,
-                                                                        oldDate: h.date,
-                                                                        newDate: h.date,
-                                                                        reason: h.reason || ''
-                                                                    });
-                                                                }}
-                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-blue-200"
-                                                                title="تعديل"
-                                                            >
-                                                                <Pencil className="w-4 h-4" />
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => handleDeleteHistoryItem(w.id, h.date)}
-                                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded border border-red-200"
-                                                                title="حذف"
-                                                            >
-                                                                <UserX className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
+                                                <td className="px-2 py-2 md:px-4 md:pl-6 md:py-3 text-xs md:text-sm print:hidden hidden md:table-cell whitespace-nowrap text-center align-middle">
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <button 
+                                                            onClick={() => {
+                                                                setEditingAbsence({
+                                                                    workerId: w.id,
+                                                                    oldDate: h.date,
+                                                                    newDate: h.date,
+                                                                    reason: h.reason || ''
+                                                                });
+                                                            }}
+                                                            className="px-3 py-1 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 text-[11px] md:text-xs font-semibold"
+                                                        >
+                                                            تعديل
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteHistoryItem(w.id, h.date)}
+                                                            className="px-3 py-1 rounded-full border border-red-200 text-red-600 hover:bg-red-50 text-[11px] md:text-xs font-semibold"
+                                                        >
+                                                            حذف
+                                                        </button>
+                                                    </div>
+                                                </td>
                                                 )}
                                             </tr>
                                         );
@@ -1600,20 +2485,29 @@ function ReportsContent() {
 
                                     return (
                                         <tr key={w.id} className={`hover:bg-rose-50/20 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50 print:bg-gray-50/50'}`}>
-                                            <td className="px-5 py-4 font-mono font-bold text-gray-500 text-sm text-center border-l border-gray-100 print:border-gray-300 print:py-1.5 print:px-2 print:text-xs">{idx + 1}</td>
-                                            <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{w.code || '-'}</td>
-                                            <td className="px-5 py-4 font-bold text-gray-900 text-base print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{w.name}</td>
-                                            <td className="px-5 py-4 text-sm text-gray-700 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                            <td className="px-2 py-2 md:px-5 md:py-4 font-mono font-bold text-gray-500 text-xs md:text-sm text-center border-l border-gray-100 print:border-gray-300 print:py-1.5 print:px-2 print:text-xs">{idx + 1}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap">{w.code || '-'}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 text-sm md:text-base break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-gray-900">{w.name}</span>
+                                                    {w.englishName && (
+                                                        <span className="text-[11px] text-black font-semibold mt-0.5 text-left" dir="ltr">
+                                                            {w.englishName}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-700 whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap">
                                                 <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{skLabel}</span>
                                             </td>
-                                            <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal" dir="ltr">{w.phone}</td>
-                                            <td className="px-5 py-4 font-mono text-gray-700 text-sm font-medium print:py-1.5 print:px-2 print:text-xs print:whitespace-normal" dir="ltr">{absenceDate}</td>
-                                            <td className="px-5 py-4 text-sm text-gray-600 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{absenceReason}</td>
-                                            <td className="px-5 py-4 text-sm text-gray-900 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{lastHistory?.recordedBy || '-'}</td>
-                                            <td className="px-5 py-4 text-sm font-bold text-gray-900 print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{assignedSite ? assignedSite.name : 'غير موزع'}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap hidden md:table-cell" dir="ltr">{w.phone}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 font-mono text-gray-700 text-xs md:text-sm font-medium whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap" dir="ltr">{absenceDate}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-600 break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{absenceReason}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm text-gray-900 whitespace-nowrap print:py-1.5 print:px-2 print:text-xs print:whitespace-nowrap hidden md:table-cell">{lastHistory?.recordedBy || '-'}</td>
+                                            <td className="px-2 py-2 md:px-5 md:py-4 text-xs md:text-sm font-bold text-gray-900 break-words print:py-1.5 print:px-2 print:text-xs print:whitespace-normal">{assignedSite ? assignedSite.name : 'غير موزع'}</td>
                                             {user?.role === 'admin' && (
-                                                <td className="px-5 py-4 text-sm print:hidden">
-                                                    <div className="flex items-center gap-2">
+                                                <td className="px-2 py-2 md:px-4 md:pl-6 md:py-3 text-xs md:text-sm print:hidden hidden md:table-cell whitespace-nowrap text-center align-middle">
+                                                    <div className="flex flex-col items-center gap-1">
                                                         <button 
                                                             onClick={() => {
                                                                 const historyDate = w.absenceHistory && w.absenceHistory.length > 0 ? w.absenceHistory[w.absenceHistory.length - 1].date : '';
@@ -1627,17 +2521,15 @@ function ReportsContent() {
                                                                     reason: w.absenceHistory && w.absenceHistory.length > 0 ? w.absenceHistory[w.absenceHistory.length - 1].reason || '' : ''
                                                                 });
                                                             }}
-                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-blue-200"
-                                                            title="تعديل"
+                                                            className="px-3 py-1 rounded-full border border-blue-200 text-blue-600 hover:bg-blue-50 text-[11px] md:text-xs font-semibold"
                                                         >
-                                                            <Pencil className="w-4 h-4" />
+                                                            تعديل
                                                         </button>
                                                         <button 
                                                             onClick={() => handleDeleteAbsence(w.id)}
-                                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded border border-red-200"
-                                                            title="حذف"
+                                                            className="px-3 py-1 rounded-full border border-red-200 text-red-600 hover:bg-red-50 text-[11px] md:text-xs font-semibold"
                                                         >
-                                                            <UserX className="w-4 h-4" />
+                                                            حذف
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1656,8 +2548,149 @@ function ReportsContent() {
                 </div>
             </div>
             </div>
-        ) : view === 'salaries' ? (
-            <SalaryReport workers={state.workers} />
+        ) : view === 'iqama_status' ? (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
+                <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-teal-50 print:bg-white print:border-b-2 print:border-teal-800">
+                    <h2 className="text-xl font-bold text-teal-700 flex items-center gap-2 print:text-black">
+                        <ShieldCheck className="w-6 h-6" />
+                        تقرير حالة الإقامة
+                        <span className="hidden print:inline text-xs font-bold text-gray-700">
+                            فلتر الإقامة: {iqamaStatusFilter === 'all' ? 'الكل' : iqamaStatusFilter === 'valid' ? 'ساري' : iqamaStatusFilter === 'soon' ? 'على وشك الانتهاء' : 'منتهي'}
+                        </span>
+                    </h2>
+                    <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full text-xs md:text-sm font-bold border border-teal-200 print:border-teal-800 print:bg-white print:text-teal-800">العدد: {iqamaFiltered.length}</span>
+                        <button onClick={() => window.print()} className="hidden print:hidden md:flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold shadow-sm">
+                            <Printer className="w-4 h-4" />
+                            طباعة
+                        </button>
+                    </div>
+                </div>
+                <div className="p-6 space-y-8 print:p-3">
+                    <div className="print:hidden flex flex-wrap items-center gap-4 mb-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-700">حالة الإقامة:</span>
+                            <select value={iqamaStatusFilter} onChange={(e) => setIqamaStatusFilter(e.target.value as any)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-teal-600 bg-white">
+                                <option value="all">الكل</option>
+                                <option value="valid">ساري</option>
+                                <option value="soon">على وشك الانتهاء</option>
+                                <option value="expired">منتهي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-3">الإقامات</h3>
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="w-full text-right border-separate border-spacing-0">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الكود</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الاسم العربي</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الاسم (EN)</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">رقم الإقامة</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">انتهاء الإقامة</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b print:hidden">الأيام المتبقية</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {iqamaFiltered.map((w, idx) => {
+                                        const d = daysRemaining(w.iqamaExpiry);
+                                        const status = labelFor(d, !!w.iqamaExpiry);
+                                        const cls = d === 0 ? 'text-red-600 font-bold' : (d !== undefined && d <= 10 ? 'text-amber-600 font-bold' : 'text-green-700 font-bold');
+                                        const cat = d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : 'valid');
+                                        return (
+                                            <tr key={w.id} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
+                                                <td className="px-4 py-2.5 text-sm font-mono text-gray-600">{w.code || '-'}</td>
+                                                <td className="px-4 py-2.5 text-sm font-bold text-gray-900">{w.name}</td>
+                                                <td className="px-4 py-2.5 text-sm font-bold text-black" dir="ltr">{w.englishName || '-'}</td>
+                                                <td className="px-4 py-2.5 text-sm font-mono text-gray-700">{w.iqamaNumber || '-'}</td>
+                                                <td className="px-4 py-2.5 text-sm font-mono print:whitespace-nowrap" dir="ltr">{w.iqamaExpiry}</td>
+                                                <td className="px-4 py-2.5 text-sm font-mono print:whitespace-nowrap print:hidden" dir="ltr">{d === undefined ? '-' : d}</td>
+                                                <td className={`px-4 py-2.5 text-sm ${cls}`}>
+                                                    <span className="print:hidden">{status}</span>
+                                                    <span className="hidden print:inline">{cat === 'expired' ? 'منتهية' : cat === 'soon' ? 'على وشك' : 'سارية'}</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        ) : view === 'insurance_status' ? (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
+                <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-cyan-50 print:bg-white print:border-b-2 print:border-cyan-800">
+                    <h2 className="text-xl font-bold text-cyan-700 flex items-center gap-2 print:text-black">
+                        <ShieldCheck className="w-6 h-6" />
+                        تقرير حالة التأمين
+                        <span className="hidden print:inline text-xs font-bold text-gray-700">
+                            فلتر التأمين: {insuranceStatusFilter === 'all' ? 'الكل' : insuranceStatusFilter === 'valid' ? 'ساري' : insuranceStatusFilter === 'soon' ? 'على وشك الانتهاء' : 'منتهي'}
+                        </span>
+                    </h2>
+                    <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 bg-cyan-100 text-cyan-700 rounded-full text-xs md:text-sm font-bold border border-cyan-200 print:border-cyan-800 print:bg-white print:text-cyan-800">العدد: {insuranceFiltered.length}</span>
+                        <button onClick={() => window.print()} className="hidden print:hidden md:flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold shadow-sm">
+                            <Printer className="w-4 h-4" />
+                            طباعة
+                        </button>
+                    </div>
+                </div>
+                <div className="p-6 space-y-8 print:p-3">
+                    <div className="print:hidden flex flex-wrap items-center gap-4 mb-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-700">حالة التأمين:</span>
+                            <select value={insuranceStatusFilter} onChange={(e) => setInsuranceStatusFilter(e.target.value as any)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-cyan-600 bg-white">
+                                <option value="all">الكل</option>
+                                <option value="valid">ساري</option>
+                                <option value="soon">على وشك الانتهاء</option>
+                                <option value="expired">منتهي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-3">التأمين</h3>
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="w-full text-right border-separate border-spacing-0">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الكود</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الاسم العربي</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الاسم (EN)</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">انتهاء التأمين</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b print:hidden">الأيام المتبقية</th>
+                                        <th className="px-4 py-3 text-xs font-bold text-gray-700 border-b">الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {insuranceFiltered.map((w, idx) => {
+                                        const d = daysRemaining(w.insuranceExpiry);
+                                        const status = labelFor(d, !!w.insuranceExpiry);
+                                        const cls = d === 0 ? 'text-red-600 font-bold' : (d !== undefined && d <= 10 ? 'text-amber-600 font-bold' : 'text-green-700 font-bold');
+                                        const cat = d === 0 ? 'expired' : (d !== undefined && d <= 10 ? 'soon' : 'valid');
+                                        return (
+                                            <tr key={w.id} className={idx % 2 ? 'bg-white' : 'bg-gray-50'}>
+                                                <td className="px-4 py-2.5 text-sm font-mono text-gray-600">{w.code || '-'}</td>
+                                                <td className="px-4 py-2.5 text-sm font-bold text-gray-900">{w.name}</td>
+                                                <td className="px-4 py-2.5 text-sm font-bold text-black" dir="ltr">{w.englishName || '-'}</td>
+                                                <td className="px-4 py-2.5 text-sm font-mono print:whitespace-nowrap" dir="ltr">{w.insuranceExpiry}</td>
+                                                <td className="px-4 py-2.5 text-sm font-mono print:whitespace-nowrap print:hidden" dir="ltr">{d === undefined ? '-' : d}</td>
+                                                <td className={`px-4 py-2.5 text-sm ${cls}`}>
+                                                    <span className="print:hidden">{status}</span>
+                                                    <span className="hidden print:inline">{cat === 'expired' ? 'منتهية' : cat === 'soon' ? 'على وشك' : 'سارية'}</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         ) : view === 'all' ? (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-2 print:border-gray-800">
                 <style dangerouslySetInnerHTML={{__html: `
@@ -1671,12 +2704,12 @@ function ReportsContent() {
                         قاعدة بيانات العمال الشاملة
                     </h2>
                     <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-bold border border-blue-200 print:border-blue-800 print:bg-white print:text-blue-800">
-                        العدد: {state.workers.length}
+                        العدد: {filteredWorkers.length}
                     </span>
                 </div>
                 
                 {/* Creative Stats Dashboard */}
-                {state.workers.length > 0 && (
+                {filteredWorkers.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50/50 print:hidden border-b border-gray-100">
                     {/* Total Workers */}
                     <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-300 relative overflow-hidden group">
@@ -1684,7 +2717,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">إجمالي القوة العاملة</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{state.workers.length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl shadow-lg shadow-blue-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <Users className="w-6 h-6" />
@@ -1702,7 +2735,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">على رأس العمل</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{state.workers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <UserCheck className="w-6 h-6" />
@@ -1711,11 +2744,11 @@ function ReportsContent() {
                          <div className="mt-4 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                             <div 
                                 className="bg-emerald-500 h-1.5 rounded-full transition-all duration-1000 ease-out" 
-                                style={{ width: `${state.workers.length ? (state.workers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / state.workers.length) * 100 : 0}%` }}
+                                style={{ width: `${filteredWorkers.length ? (filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100 : 0}%` }}
                             ></div>
                         </div>
                         <div className="mt-1 text-[10px] text-gray-400 text-left font-mono">
-                            {state.workers.length ? Math.round((state.workers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / state.workers.length) * 100) : 0}% نسبة التشغيل
+                            {filteredWorkers.length ? Math.round((filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100) : 0}% نسبة التشغيل
                         </div>
                     </div>
 
@@ -1725,7 +2758,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">جاهز للعمل</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{state.workers.filter(w => !w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => !w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl shadow-lg shadow-amber-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <Coffee className="w-6 h-6" />
@@ -1742,7 +2775,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">غياب / إجازة</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{state.workers.filter(w => w.availabilityStatus === 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => w.availabilityStatus === 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-rose-500 to-rose-600 text-white rounded-xl shadow-lg shadow-rose-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <UserX className="w-6 h-6" />
@@ -1755,12 +2788,65 @@ function ReportsContent() {
                     </div>
                 </div>
                 )}
-                {state.workers.length === 0 ? (
+                {filteredWorkers.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">
                         <p>لا يوجد عمال في النظام</p>
                     </div>
                 ) : (
                     <>
+                            {/* Iqama & Insurance Summary (Screen + Print) */}
+                            <div className="px-8 pt-6 print:px-4">
+                              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm print:border-2 print:border-gray-800">
+                                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between print:bg-white print:border-b-2 print:border-gray-800">
+                                  <h3 className="text-lg font-bold text-gray-800">إحصائية حالة الإقامة والتأمين</h3>
+                                  <div className="text-xs text-gray-500 font-bold">الإجمالي: {iqInsStats.total}</div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 print:p-3">
+                                  {/* Iqama */}
+                                  <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/40 print:bg-white">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <div className="text-sm font-bold text-gray-700">حالة الإقامة</div>
+                                      <div className="text-[11px] text-gray-500 font-mono">{iqInsStats.iqama.valid + iqInsStats.iqama.soon + iqInsStats.iqama.expired + iqInsStats.iqama.unregistered}</div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-green-50 text-green-700 border-green-200 print:bg-white print:text-black print:border-gray-400">ساري: {iqInsStats.iqama.valid}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-yellow-50 text-yellow-700 border-yellow-200 print:bg-white print:text-black print:border-gray-400">قريب: {iqInsStats.iqama.soon}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-red-50 text-red-700 border-red-200 print:bg-white print:text-black print:border-gray-400">منتهي: {iqInsStats.iqama.expired}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-gray-100 text-gray-700 border-gray-200 print:bg-white print:text-black print:border-gray-400">غير مسجل: {iqInsStats.iqama.unregistered}</span>
+                                    </div>
+                                  </div>
+                                  {/* Insurance */}
+                                  <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/40 print:bg-white">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <div className="text-sm font-bold text-gray-700">حالة التأمين</div>
+                                      <div className="text-[11px] text-gray-500 font-mono">{iqInsStats.insurance.valid + iqInsStats.insurance.soon + iqInsStats.insurance.expired + iqInsStats.insurance.unregistered}</div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-green-50 text-green-700 border-green-200 print:bg-white print:text-black print:border-gray-400">ساري: {iqInsStats.insurance.valid}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-yellow-50 text-yellow-700 border-yellow-200 print:bg-white print:text-black print:border-gray-400">قريب: {iqInsStats.insurance.soon}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-red-50 text-red-700 border-red-200 print:bg-white print:text-black print:border-gray-400">منتهي: {iqInsStats.insurance.expired}</span>
+                                      <span className="px-2.5 py-1 rounded-full border text-[11px] font-bold bg-gray-100 text-gray-700 border-gray-200 print:bg-white print:text-black print:border-gray-400">غير مسجل: {iqInsStats.insurance.unregistered}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 print:hidden flex items-center gap-4">
+                                <div className="relative flex-1 max-w-md">
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <Search className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        placeholder="بحث عن موظف (الاسم، الرقم الوظيفي، الإقامة، الجوال، الجنسية)..." 
+                                        className="block w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        value={workerSearchQuery}
+                                        onChange={(e) => setWorkerSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
                             <div className="overflow-x-auto print:hidden max-h-[800px] overflow-y-auto relative">
                                 <table className="w-full text-right border-separate border-spacing-0 text-sm">
                                     <thead className="bg-gray-100 text-gray-700 font-bold sticky top-0 z-20 shadow-sm print:static">
@@ -1785,7 +2871,7 @@ function ReportsContent() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 bg-white">
-                                        {state.workers.map((w, idx) => {
+                                        {filteredWorkers.map((w, idx) => {
                                             const iqDays = daysRemaining(w.iqamaExpiry);
                                             const insDays = daysRemaining(w.insuranceExpiry);
                                             const skLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
@@ -1830,11 +2916,11 @@ function ReportsContent() {
                                                     <td className={`px-4 py-2.5 border-b border-gray-200 whitespace-nowrap ${getStatusColor(iqDays)} print:px-1 print:py-0.5`}>
                                                         {labelFor(iqDays, !!w.iqamaExpiry)}
                                                     </td>
-                                                    <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap font-mono text-gray-700 print:px-1 print:py-0.5" dir="ltr">{w.iqamaExpiry}</td>
+                                                    <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap font-mono text-gray-700 print:px-1 print:py-0.5 print:whitespace-nowrap" dir="ltr">{w.iqamaExpiry}</td>
                                                     <td className={`px-4 py-2.5 border-b border-gray-200 whitespace-nowrap ${getStatusColor(insDays)} print:px-1 print:py-0.5`}>
                                                         {labelFor(insDays, !!w.insuranceExpiry)}
                                                     </td>
-                                                    <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap font-mono text-gray-700 print:px-1 print:py-0.5" dir="ltr">{w.insuranceExpiry}</td>
+                                                    <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap font-mono text-gray-700 print:px-1 print:py-0.5 print:whitespace-nowrap" dir="ltr">{w.insuranceExpiry}</td>
                                                     <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap text-gray-700 print:px-1 print:py-0.5">{w.bankName || '-'}</td>
                                                     <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap font-mono text-gray-700 print:px-1 print:py-0.5" dir="ltr">{w.bankAccount || '-'}</td>
                                                     <td className="px-4 py-2.5 border-b border-gray-200 whitespace-nowrap text-gray-700 font-medium print:px-1 print:py-0.5">
@@ -1849,7 +2935,7 @@ function ReportsContent() {
 
                             {/* Print View Layout (Cards) */}
                             <div className="hidden print:grid grid-cols-2 gap-4 p-1">
-                                {state.workers.map((w, idx) => {
+                                {filteredWorkers.map((w, idx) => {
                                     const iqDays = daysRemaining(w.iqamaExpiry);
                                     const insDays = daysRemaining(w.insuranceExpiry);
                                     const skLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
@@ -1909,7 +2995,7 @@ function ReportsContent() {
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-500">انتهاء الإقامة:</span>
-                                                    <span className={'font-mono ' + getStatusColor(iqDays)}>{w.iqamaExpiry}</span>
+                                                    <span className={'font-mono print:whitespace-nowrap ' + getStatusColor(iqDays)}>{w.iqamaExpiry}</span>
                                                 </div>
 
                                                 <div className="flex justify-between">
@@ -1918,7 +3004,7 @@ function ReportsContent() {
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-500">انتهاء التأمين:</span>
-                                                    <span className="font-mono">{w.insuranceExpiry}</span>
+                                                    <span className="font-mono print:whitespace-nowrap">{w.insuranceExpiry}</span>
                                                 </div>
 
                                                 <div className="col-span-2 border-t border-gray-100 my-1"></div>

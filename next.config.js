@@ -1,15 +1,11 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  optimizeFonts: false,
+  images: { unoptimized: true },
   output: 'standalone',
-
-  // هذا السطر هو المهم جداً لحل 404 لملفات _next
-  experimental: {
-    outputFileTracingRoot: __dirname,
-  },
-
-  images: {
-    unoptimized: true,
-  },
+  distDir: isDev ? 'next-dev' : '.next',
 };
 
 module.exports = nextConfig;

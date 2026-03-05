@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from './state/AuthContext';
 import { useAppState } from '@/components/state/AppStateContext';
-import { LayoutDashboard, Users, HardHat, ClipboardList, Car, Settings, LogOut, Check, Wallet } from 'lucide-react';
+import { LayoutDashboard, Users, HardHat, ClipboardList, Car, Settings, LogOut, Check, Wallet, FileText } from 'lucide-react';
 
 export default function TopUserBar() {
   const { user, logout } = useAuth();
@@ -41,7 +41,7 @@ export default function TopUserBar() {
       href: '/workers', 
       label: 'العمال', 
       icon: Users,
-      roles: ['admin', 'supervisor', 'viewer'],
+      roles: ['admin', 'supervisor', 'viewer', 'accountant'],
       activeClass: 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 ring-2 ring-indigo-100',
       inactiveClass: 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'
     },
@@ -50,9 +50,17 @@ export default function TopUserBar() {
       href: '/reports', 
       label: 'التقارير', 
       icon: ClipboardList,
-      roles: ['admin', 'supervisor', 'engineer'],
+      roles: ['admin', 'supervisor', 'engineer', 'accountant'],
       activeClass: 'bg-purple-600 text-white shadow-lg shadow-purple-200 ring-2 ring-purple-100',
       inactiveClass: 'text-gray-600 hover:bg-purple-50 hover:text-purple-700'
+    },
+    { 
+      href: '/documents', 
+      label: 'المستندات', 
+      icon: FileText,
+      roles: ['admin', 'supervisor'],
+      activeClass: 'bg-amber-600 text-white shadow-lg shadow-amber-200 ring-2 ring-amber-100',
+      inactiveClass: 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'
     },
      // Vehicles: Pink (Distinct from Red/Purple)
     { 
@@ -89,6 +97,14 @@ export default function TopUserBar() {
       roles: ['admin'],
       activeClass: 'bg-green-600 text-white shadow-lg shadow-green-200 ring-2 ring-green-100',
       inactiveClass: 'text-gray-600 hover:bg-green-50 hover:text-green-700'
+    },
+    { 
+      href: '/activity', 
+      label: 'السجلات', 
+      icon: ClipboardList,
+      roles: ['admin'],
+      activeClass: 'bg-gray-800 text-white shadow-lg shadow-gray-300 ring-2 ring-gray-200',
+      inactiveClass: 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
     },
   ];
 

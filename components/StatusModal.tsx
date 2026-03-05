@@ -16,12 +16,19 @@ export function StatusModal({ worker, onClose }: StatusModalProps) {
   const { recordAbsence, recordLeave, updateWorkerStatus, setState } = useAppState();
   const [activeTab, setActiveTab] = useState<'absence' | 'leave'>('absence');
 
+  const getTodayLocal = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 10);
+  };
+
   // Absence State
-  const [absenceDate, setAbsenceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [absenceDate, setAbsenceDate] = useState(getTodayLocal());
   const [absenceReason, setAbsenceReason] = useState('');
 
   // Leave State
-  const [leaveStart, setLeaveStart] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveStart, setLeaveStart] = useState(getTodayLocal());
   const [leaveEnd, setLeaveEnd] = useState('');
   const [leaveType, setLeaveType] = useState<'annual' | 'sick' | 'emergency' | 'other'>('annual');
   const [leaveNotes, setLeaveNotes] = useState('');
@@ -54,7 +61,6 @@ export function StatusModal({ worker, onClose }: StatusModalProps) {
   const handleRecordAbsence = () => {
     if (!absenceDate) return;
     recordAbsence(worker.id, absenceDate, absenceReason, user?.username || 'Admin');
-    updateWorkerStatus(worker.id, 'absent');
 
     // Notification Logic
     const newNotification: Notification = {

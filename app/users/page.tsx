@@ -135,6 +135,7 @@ function UserEditModal({
                                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none bg-white font-bold"
                             >
                                 <option value="viewer">مشاهد (Viewer)</option>
+                                <option value="accountant">محاسب (Accountant)</option>
                                 <option value="engineer">مهندس (Engineer)</option>
                                 <option value="supervisor">مسؤول عمال (Supervisor)</option>
                                 <option value="admin">مسؤول (Admin)</option>
@@ -189,7 +190,7 @@ export default function UsersPage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'admin' | 'engineer' | 'supervisor' | 'viewer'>('viewer');
+  const [role, setRole] = useState<'admin' | 'engineer' | 'supervisor' | 'viewer' | 'accountant'>('viewer');
   const [showPassword, setShowPassword] = useState(false);
 
   const [changePasswordForm, setChangePasswordForm] = useState('');
@@ -206,6 +207,7 @@ export default function UsersPage() {
   }
 
   const isAdmin = user.role === 'admin'; 
+  const isPrimaryAdmin = isAdmin && user.username === 'admin';
 
   // Non-admin view: Change Password Only
   if (!isAdmin) {
@@ -276,13 +278,13 @@ export default function UsersPage() {
   const [viewProjectsUser, setViewProjectsUser] = useState<any | null>(null); // State for viewing projects modal
   const [editForm, setEditForm] = useState({ username: '', password: '', role: 'viewer' as const, assignedProjectIds: [] as string[] });
 
-  const startEdit = (user: any) => {
-    setEditingUser(user.username);
+  const startEdit = (targetUser: any) => {
+    setEditingUser(targetUser.username);
     setEditForm({ 
-        username: user.username, 
-        password: (user.password && !user.password.startsWith('$2')) ? user.password : '', 
-        role: user.role || 'viewer',
-        assignedProjectIds: user.assignedProjectIds || []
+        username: targetUser.username, 
+        password: (isPrimaryAdmin && targetUser.password && !targetUser.password.startsWith('$2')) ? targetUser.password : '', 
+        role: targetUser.role || 'viewer',
+        assignedProjectIds: targetUser.assignedProjectIds || []
     });
   };
 
@@ -392,6 +394,7 @@ export default function UsersPage() {
                             onChange={(e) => setRole(e.target.value as any)}
                         >
                             <option value="viewer">مشاهد (Viewer)</option>
+                            <option value="accountant">محاسب (Accountant)</option>
                             <option value="engineer">مهندس (Engineer)</option>
                             <option value="supervisor">مسؤول عمال (Supervisor)</option>
                             <option value="admin">مسؤول (Admin)</option>
@@ -498,10 +501,18 @@ export default function UsersPage() {
                             ) : '-'}
                         </td>
                         <td className="px-6 py-5 align-middle">
-                            {u.password && u.password.startsWith('$2') ? (
-                            <span className="text-gray-400 font-mono text-sm font-bold" title="كلمة المرور مشفرة">(مشفر)</span>
+                            {u.password ? (
+                              u.password.startsWith('$2') ? (
+                                <span className="text-gray-400 font-mono text-sm font-bold" title="كلمة المرور مشفرة">
+                                  {isPrimaryAdmin ? '(مشفر)' : '******'}
+                                </span>
+                              ) : (
+                                <span className="font-mono text-gray-800 text-lg font-bold">
+                                  {isPrimaryAdmin ? u.password : '******'}
+                                </span>
+                              )
                             ) : (
-                            <span className="font-mono text-gray-800 text-lg font-bold">{u.password}</span>
+                              <span className="text-gray-400 text-sm">-</span>
                             )}
                         </td>
                         <td className="px-6 py-5 align-middle">
@@ -512,7 +523,9 @@ export default function UsersPage() {
                                 <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => {
-                                        const passwordText = u.password && u.password.startsWith('$2') ? '******' : u.password;
+                                        const passwordText = isPrimaryAdmin
+                                          ? (u.password && u.password.startsWith('$2') ? '******' : u.password)
+                                          : '******';
                                         const message = `مرحبا بك في تطبيق GoStaff\nUsername: ${u.username}\nPassword: ${passwordText}`;
                                         window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
                                     }}

@@ -1,7 +1,8 @@
 'use client';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState, SalaryRecord } from '@/types';
-import { initialAppState, initialUsers } from '@/lib/data';
+import { AppState, SalaryRecord, Worker } from '@/types';
+import { initialAppState, initialUsers, initialDocumentCategories } from '@/lib/data';
+import { logActivity } from '@/lib/activity';
 
 const AppStateContext = createContext<{
   state: AppState;
@@ -18,6 +19,50 @@ const AppStateContext = createContext<{
   updateSalaryData: (workerId: string, data: Partial<SalaryRecord>) => void;
 } | undefined>(undefined);
 
+function ensureUniqueWorkerCodes(state: AppState): AppState {
+  const workers = state.workers || [];
+
+  let base =
+    typeof state.lastWorkerCode === 'number' && !isNaN(state.lastWorkerCode)
+      ? state.lastWorkerCode
+      : 0;
+
+  if (!base) {
+    for (const w of workers) {
+      if (!w.code) continue;
+      const n = parseInt(String(w.code).replace(/\D/g, ''), 10);
+      if (!isNaN(n) && n > base) base = n;
+    }
+  }
+
+  const used = new Set<string>();
+
+  const updatedWorkers = workers.map((w) => {
+    let code = w.code;
+
+    if (code && !used.has(code)) {
+      used.add(code);
+      const n = parseInt(String(code).replace(/\D/g, ''), 10);
+      if (!isNaN(n) && n > base) base = n;
+      return w;
+    }
+
+    let nextNum = base;
+    let newCode: string;
+    do {
+      nextNum += 1;
+      newCode = 'EM' + nextNum.toString().padStart(4, '0');
+    } while (used.has(newCode));
+
+    base = nextNum;
+    used.add(newCode);
+
+    return { ...w, code: newCode };
+  });
+
+  return { ...state, workers: updatedWorkers, lastWorkerCode: base };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(initialAppState);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -30,11 +75,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (response.ok) {
           const payload = await response.json();
           if (payload && payload.data) {
-             const merged = { ...initialAppState, ...payload.data };
-             // Ensure critical arrays exist
+             let merged: AppState = { ...initialAppState, ...payload.data };
              if (!merged.users || merged.users.length === 0) merged.users = initialUsers;
+             if (!merged.documentCategories || merged.documentCategories.length === 0) {
+               merged.documentCategories = initialDocumentCategories;
+             }
              
-             // Deduplicate absence history
              if (merged.workers) {
                 merged.workers = merged.workers.map((w: any) => {
                   if (w.absenceHistory && w.absenceHistory.length > 0) {
@@ -51,6 +97,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   return w;
                 });
              }
+
+             merged = ensureUniqueWorkerCodes(merged);
 
              setState(merged);
              setIsLoaded(true);
@@ -69,8 +117,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (stored) {
             const parsed = JSON.parse(stored);
             if (parsed && parsed.workers) {
-              const merged = { ...initialAppState, ...parsed };
+              let merged: AppState = { ...initialAppState, ...parsed };
               if (!merged.users || merged.users.length === 0) merged.users = initialUsers;
+              if (!merged.documentCategories || merged.documentCategories.length === 0) {
+                merged.documentCategories = initialDocumentCategories;
+              }
+              merged = ensureUniqueWorkerCodes(merged);
               setState(merged);
             }
           }
@@ -91,19 +143,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const tid = setTimeout(async () => {
       try {
         // Save to Backend API
-        await fetch('/api/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
-        });
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state)
+        }).catch(() => {});
 
-        // Save to LocalStorage (Cache)
-        localStorage.setItem('labour-app-state-v4', JSON.stringify(state));
-        console.log('Auto-saved to Backend API & LocalStorage');
+        try {
+          localStorage.setItem('labour-app-state-v4', JSON.stringify(state));
+        } catch {}
       } catch (err) {
         console.error('Auto-save failed:', err);
       }
-    }, 1000); // Debounce 1s
+    }, 4000); // Debounce 4s لتقليل الضغط وتحسين الأداء
     return () => clearTimeout(tid);
   }, [state, isLoaded]);
 
@@ -133,32 +185,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return w;
       })
     }));
+    logActivity('update_worker_status');
   };
 
   const recordAbsence = (workerId: string, date: string, reason?: string, recordedBy?: string) => {
-    setState(prev => ({
-      ...prev,
-      workers: prev.workers.map(w => {
+    setState(prev => {
+      const updatedWorkers: Worker[] = prev.workers.map((w): Worker => {
         if (w.id === workerId) {
-          const newHistory = w.absenceHistory ? [...w.absenceHistory] : [];
-          
-          // Prevent duplicate entry for the same date
-          if (!newHistory.some(h => h.date === date)) {
-            newHistory.push({ date, reason, recordedBy });
+          const history = Array.isArray(w.absenceHistory) ? [...w.absenceHistory] : [];
+          if (!history.some(h => h.date === date)) {
+            history.push({ date, reason, recordedBy });
           }
-          
-          return { 
-              ...w, 
-              availabilityStatus: 'absent', 
-              absenceHistory: newHistory, 
-              waitingSince: undefined,
-              // Only update absentSince if not already absent
-              absentSince: w.availabilityStatus === 'absent' && w.absentSince ? w.absentSince : new Date().toISOString() 
+
+          const newAbsentSince =
+            w.availabilityStatus === 'absent' && w.absentSince
+              ? w.absentSince
+              : new Date().toISOString();
+
+          return {
+            ...w,
+            availabilityStatus: 'absent',
+            absenceHistory: history,
+            waitingSince: undefined,
+            absentSince: newAbsentSince,
           };
         }
         return w;
-      })
-    }));
+      });
+
+      const next: AppState = {
+        ...prev,
+        workers: updatedWorkers,
+      };
+
+      try {
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(next),
+        }).catch(() => {});
+      } catch {}
+
+      return next;
+    });
+    logActivity('record_absence');
   };
 
   const cancelAbsence = (workerId: string) => {
@@ -188,6 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return w;
       })
     }));
+    logActivity('cancel_absence');
   };
 
   const deleteAbsence = (workerId: string, date: string) => {
@@ -201,6 +272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return w;
       })
     }));
+    logActivity('delete_absence');
   };
 
   const updateAbsence = (workerId: string, oldDate: string, newDate: string, reason?: string) => {
@@ -238,20 +310,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return w;
       })
     }));
+    logActivity('update_absence');
   };
 
   const recordLeave = (workerId: string, leave: { startDate: string; endDate: string; type: 'annual' | 'sick' | 'emergency' | 'other'; notes?: string }) => {
-    setState(prev => ({
-      ...prev,
-      workers: prev.workers.map(w => {
+    setState(prev => {
+      const targetWorker = prev.workers.find(w => w.id === workerId);
+      const oldSiteId = targetWorker?.assignedSiteId;
+
+      const updatedWorkers: Worker[] = prev.workers.map((w): Worker => {
         if (w.id === workerId) {
-          const newHistory = w.leaveHistory ? [...w.leaveHistory] : [];
-          newHistory.push(leave);
-          return { ...w, availabilityStatus: 'rest', leaveHistory: newHistory, waitingSince: undefined };
+          const history = Array.isArray(w.leaveHistory) ? [...w.leaveHistory] : [];
+          history.push(leave);
+
+          return {
+            ...w,
+            availabilityStatus: 'rest',
+            leaveHistory: history,
+            waitingSince: undefined,
+            assignedSiteId: undefined,
+          };
         }
         return w;
-      })
-    }));
+      });
+
+      const updatedSites = oldSiteId
+        ? prev.sites.map(s =>
+            s.id === oldSiteId
+              ? { ...s, assignedWorkerIds: s.assignedWorkerIds.filter(id => id !== workerId) }
+              : s
+          )
+        : prev.sites;
+
+      const next: AppState = {
+        ...prev,
+        workers: updatedWorkers,
+        sites: updatedSites,
+      };
+
+      try {
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(next),
+        }).catch(() => {});
+      } catch {}
+
+      return next;
+    });
+    logActivity('record_leave');
   };
 
   const deleteLeave = (workerId: string, startDate: string, endDate: string) => {
@@ -269,6 +376,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return w;
         })
     }));
+    logActivity('delete_leave');
   };
 
   const updateLeave = (workerId: string, oldStartDate: string, newLeave: { startDate: string; endDate: string; type: 'annual' | 'sick' | 'emergency' | 'other'; notes?: string }) => {
@@ -287,6 +395,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return w;
         })
     }));
+    logActivity('update_leave');
   };
 
   const updateSalaryData = (workerId: string, data: Partial<SalaryRecord>) => {

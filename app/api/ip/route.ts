@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import os from 'os';
+export const runtime = 'nodejs';
 
 export async function GET() {
+  const os = await import('os');
   const interfaces = os.networkInterfaces();
   let ip = '127.0.0.1';
 

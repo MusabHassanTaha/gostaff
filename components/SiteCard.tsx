@@ -6,7 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Site, Worker, SkillDefinition } from '@/types';
 import { WorkerCard } from './WorkerCard';
 import { MapPin, Truck, ArrowUpDown, Settings, ChevronDown, ChevronUp, Plus, X, Search } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { buildWhatsappLink } from '@/lib/whatsapp';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -18,6 +18,7 @@ interface SiteCardProps {
   workers: Worker[];
   skills: SkillDefinition[];
   allWorkers?: Worker[];
+  engineer?: Worker;
   onDeleteWorker?: (id: string) => void;
   onUpdateWorker?: (id: string, name: string) => void;
   sites?: Site[];
@@ -28,7 +29,7 @@ interface SiteCardProps {
   isMobile?: boolean;
 }
 
-export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, onUpdateWorker, sites, onAssign, onReorder, onUpdateSite, onToggleAvailability, isMobile }: SiteCardProps) {
+export function SiteCard({ site, workers, skills, allWorkers, engineer, onDeleteWorker, onUpdateWorker, sites, onAssign, onReorder, onUpdateSite, onToggleAvailability, isMobile }: SiteCardProps) {
   const { user } = useAuth();
   const { setNodeRef, isOver } = useDroppable({
     id: site.id,
@@ -38,6 +39,13 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
   const [isReorderOpen, setIsReorderOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showNote, setShowNote] = useState(false);
+  const [reorderQuery, setReorderQuery] = useState('');
+  const reorderListRef = useRef<HTMLDivElement>(null);
+  const filteredReorderSites = useMemo(() => {
+    const q = reorderQuery.trim().toLowerCase();
+    if (!sites) return [];
+    return sites.filter(s => s.id !== site.id && (!q || s.name.toLowerCase().includes(q)));
+  }, [sites, site.id, reorderQuery]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAddWorkerOpen, setIsAddWorkerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -158,32 +166,126 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
                 </button>
                 
                 {isReorderOpen && (
-                  <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border z-50 overflow-hidden text-right">
-                    <div className="p-3 border-b bg-gray-50 text-sm font-medium text-gray-600">نقل المشروع بعد...</div>
-                    <div className="max-h-60 overflow-y-auto">
-                      <button
-                        onClick={() => {
-                          onReorder(site.id, '__TOP__');
-                          setIsReorderOpen(false);
+                  <>
+                    {/* سطح المكتب والتابلت: قائمة منبثقة يسار الكرت كما هي */}
+                    <div className="hidden md:block absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border z-50 overflow-hidden text-right">
+                      <div className="p-3 border-b bg-gray-50 text-sm font-medium text-gray-600">نقل المشروع بعد...</div>
+                      <div className="p-2 border-b bg-white">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="بحث المشروع..."
+                            className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-400 text-sm"
+                            value={reorderQuery}
+                            onChange={e => setReorderQuery(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        ref={reorderListRef}
+                        className="max-h-60 overflow-y-auto overscroll-contain scroll-smooth"
+                        onWheel={(e) => {
+                          if (reorderListRef.current) {
+                            reorderListRef.current.scrollTop += e.deltaY;
+                          }
                         }}
-                        className="w-full px-4 py-3 text-sm text-right hover:bg-gray-50 flex items-center justify-between text-gray-700 border-b border-gray-50"
                       >
-                        <span>(بداية القائمة)</span>
-                      </button>
-                      {sites.filter(s => s.id !== site.id).map(s => (
                         <button
-                          key={s.id}
                           onClick={() => {
-                            onReorder(site.id, s.id);
+                            onReorder(site.id, '__TOP__');
                             setIsReorderOpen(false);
                           }}
-                          className="w-full px-4 py-3 text-sm text-right hover:bg-gray-50 flex items-center justify-between text-gray-700 border-b border-gray-50 last:border-0"
+                          className="w-full px-4 py-3 text-sm text-right hover:bg-gray-50 flex items-center justify-between text-gray-700 border-b border-gray-50"
                         >
-                          <span className="truncate">{s.name}</span>
+                          <span>(بداية القائمة)</span>
                         </button>
-                      ))}
+                        {filteredReorderSites.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => {
+                              onReorder(site.id, s.id);
+                              setIsReorderOpen(false);
+                            }}
+                            className="w-full px-4 py-3 text-sm text-right hover:bg-gray-50 flex items-center justify-between text-gray-700 border-b border-gray-50 last:border-0"
+                          >
+                            <span className="truncate">{s.name}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+
+                    {/* الجوال: Bottom Sheet احترافي مثل الجرس */}
+                    <div 
+                      className="md:hidden fixed inset-0 z-[200]"
+                      onClick={() => setIsReorderOpen(false)}
+                    >
+                      <div className="absolute inset-0 bg-black/40 animate-in fade-in" />
+                      <div 
+                        className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl ring-1 ring-black/5 max-h-[75vh] flex flex-col animate-in slide-in-from-bottom duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex justify-center pt-3 pb-1">
+                          <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+                        </div>
+                        <div className="px-4 pb-2 border-b bg-gray-50 flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-500">ترتيب المشروع</span>
+                            <span className="text-sm font-bold text-gray-900 truncate">{site.name}</span>
+                          </div>
+                          <button 
+                            onClick={() => setIsReorderOpen(false)}
+                            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200"
+                          >
+                            إغلاق
+                          </button>
+                        </div>
+                        <div className="p-3 border-b bg-white">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                              type="text"
+                              placeholder="بحث المشروع..."
+                              className="w-full pl-8 pr-3 py-2.5 rounded-full border border-gray-300 focus:ring-2 focus:ring-blue-200 focus:border-blue-400 text-sm bg-gray-50"
+                              value={reorderQuery}
+                              onChange={e => setReorderQuery(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div
+                          ref={reorderListRef}
+                          className="flex-1 overflow-y-auto overscroll-contain scrollbar-hide divide-y"
+                        >
+                          <button
+                            onClick={() => {
+                              onReorder(site.id, '__TOP__');
+                              setIsReorderOpen(false);
+                            }}
+                            className="w-full px-4 py-3 text-sm text-right flex items-center justify-between text-gray-800 bg-white active:bg-gray-50"
+                          >
+                            <span className="truncate font-bold">(بداية القائمة)</span>
+                          </button>
+                          {filteredReorderSites.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => {
+                                onReorder(site.id, s.id);
+                                setIsReorderOpen(false);
+                              }}
+                              className="w-full px-4 py-3 text-sm text-right flex items-center justify-between text-gray-800 bg-white active:bg-gray-50"
+                            >
+                              <span className="truncate">{s.name}</span>
+                            </button>
+                          ))}
+                          {filteredReorderSites.length === 0 && (
+                            <div className="p-8 text-center text-gray-400 text-sm">
+                              لا توجد مشاريع مطابقة لبحثك
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -191,7 +293,7 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
             {site.engineerId && (
               <div className="text-xs text-gray-300" suppressHydrationWarning>
                 {(() => {
-                  const eng = (allWorkers || []).find(w => w.id === site.engineerId);
+                  const eng = engineer || (allWorkers || []).find(w => w.id === site.engineerId);
                   return eng ? `${eng.name} ${eng.englishName ? `(${eng.englishName})` : ''} - ${eng.phone}` : 'المهندس غير موجود';
                 })()}
               </div>
@@ -349,6 +451,8 @@ export function SiteCard({ site, workers, skills, allWorkers, onDeleteWorker, on
                   skillDef={skills.find(s => s.name === worker.skill)}
                   onDelete={() => onDeleteWorker?.(worker.id)}
                   onUpdate={(name) => onUpdateWorker?.(worker.id, name)}
+                  isForeman={site.foremanId === worker.id}
+                  onToggleForeman={onUpdateSite ? (() => onUpdateSite(site.id, { foremanId: site.foremanId === worker.id ? undefined : worker.id })) : undefined}
                   siteId={site.id}
                   sites={sites}
                   onAssign={onAssign}

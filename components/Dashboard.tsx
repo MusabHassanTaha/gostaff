@@ -17,6 +17,7 @@ import { useAuth } from './state/AuthContext';
 import { daysRemaining, labelFor, statusClasses } from '@/lib/date';
 import { buildWhatsappLink } from '@/lib/whatsapp';
 import { MobileAccess } from './MobileAccess';
+import { logActivity } from '@/lib/activity';
 import ProfessionalDashboard from './ProfessionalDashboard';
 
 
@@ -30,6 +31,40 @@ export default function Dashboard() {
   // Notification Logic
   const [showNotifications, setShowNotifications] = useState(false);
   const unreadCount = state.notifications?.filter(n => !n.isRead).length || 0;
+  const prevNotifCount = useRef<number>(state.notifications?.length || 0);
+
+  useEffect(() => {
+    const curr = state.notifications?.length || 0;
+    const prev = prevNotifCount.current;
+    if (curr > prev) {
+      const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+      if (isMobile && typeof window !== 'undefined') {
+        try {
+          if (navigator.vibrate) {
+            navigator.vibrate([90, 60, 90]);
+          }
+        } catch {}
+        try {
+          const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtx) {
+            const ctx = new AudioCtx();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 880;
+            g.gain.setValueAtTime(0.0001, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.start();
+            o.stop(ctx.currentTime + 0.28);
+          }
+        } catch {}
+      }
+    }
+    prevNotifCount.current = curr;
+  }, [state.notifications?.length]);
 
   const handleNotificationClick = (notification: Notification) => {
       setState(prev => ({
@@ -39,7 +74,13 @@ export default function Dashboard() {
       setShowNotifications(false);
 
       if (notification.type === 'new_worker') {
-           router.push(`/workers?search=${notification.targetId}`);
+          const worker = state.workers.find(w => w.id === notification.targetId);
+          const query = worker?.name || worker?.code || '';
+          if (query) {
+              router.push(`/workers?search=${encodeURIComponent(query)}`);
+          } else {
+              router.push('/workers');
+          }
       } else if (notification.type === 'absence_report') {
           router.push(`/reports?view=absence&search=${notification.targetId}`);
       }
@@ -314,6 +355,12 @@ export default function Dashboard() {
       ...prev,
       sites: prev.sites.map(s => s.id === siteId ? { ...s, ...updates } : s)
     }));
+    try {
+      const site = state.sites.find(s => s.id === siteId);
+      const action = 'update_site';
+      const details = `site:${site?.name || siteId} updates:${Object.keys(updates).join(',')}`;
+      logActivity(action, details);
+    } catch {}
   };
 
   const handleReorderSite = (siteId: string, targetSiteId: string) => {
@@ -336,6 +383,11 @@ export default function Dashboard() {
         }
         return { ...prev, sites: newSites };
     });
+    try {
+      const a = state.sites.find(s => s.id === siteId)?.name || siteId;
+      const b = targetSiteId === '__TOP__' ? 'TOP' : (state.sites.find(s => s.id === targetSiteId)?.name || targetSiteId);
+      logActivity('reorder_site', `site:${a} after:${b}`);
+    } catch {}
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -458,6 +510,11 @@ export default function Dashboard() {
                          s.id === targetSiteId ? { ...s, assignedWorkerIds: newAssigned } : s
                      );
                      setState({ ...state, sites: newSites });
+                     try {
+                       const siteName = state.sites.find(s => s.id === targetSiteId)?.name || targetSiteId;
+                       const w = state.workers.find(wk => wk.id === activeId);
+                       logActivity('reorder_worker', `site:${siteName} worker:${w?.name || activeId}`);
+                     } catch {}
                  }
              }
              return;
@@ -498,6 +555,12 @@ export default function Dashboard() {
                  });
 
                  setState({ ...state, workers: newWorkers, sites: newSites });
+                 try {
+                   const w = state.workers.find(wk => wk.id === activeId);
+                   const fromSite = oldSiteId ? (state.sites.find(s => s.id === oldSiteId)?.name || oldSiteId) : 'الانتظار';
+                   const toSite = state.sites.find(s => s.id === targetSiteId)?.name || targetSiteId;
+                   logActivity('move_worker', `worker:${w?.name || activeId} from:${fromSite} to:${toSite}`);
+                 } catch {}
              }
              return;
          }
@@ -513,6 +576,11 @@ export default function Dashboard() {
       if (oldIndex !== -1 && newIndex !== -1) {
         const newSites = arrayMove(state.sites, oldIndex, newIndex);
         setState({ ...state, sites: newSites });
+        try {
+          const a = state.sites.find(s => s.id === activeId)?.name || activeId;
+          const b = state.sites.find(s => s.id === overId)?.name || overId;
+          logActivity('reorder_site_drag', `from:${a} to:${b}`);
+        } catch {}
       }
     }
   };
@@ -621,6 +689,14 @@ export default function Dashboard() {
       workers: newWorkers,
       sites: newSites,
     });
+    try {
+      const w = worker;
+      const fromSite = oldSiteId ? (state.sites.find(s => s.id === oldSiteId)?.name || oldSiteId) : 'الانتظار';
+      const toSite = siteId ? (state.sites.find(s => s.id === siteId)?.name || siteId) : 'الانتظار';
+      const action = siteId && oldSiteId ? 'move_worker' : (siteId ? 'assign_worker' : 'unassign_worker');
+      const details = `worker:${w.name}${w.code ? `(${w.code})` : ''} from:${fromSite} to:${toSite}`;
+      logActivity(action, details);
+    } catch {}
   };
 
   const handleToggleAvailability = (workerId: string, status: 'available' | 'absent') => {
@@ -646,6 +722,10 @@ export default function Dashboard() {
         ...prev,
         workers: prev.workers.map(w => w.id === workerId ? { ...w, availabilityStatus: status } : w)
     }));
+    try {
+      const w = state.workers.find(x => x.id === workerId);
+      logActivity('toggle_availability', `worker:${w?.name || workerId} status:${status}`);
+    } catch {}
   };
 
   const handleDragCancel = () => {
@@ -660,6 +740,8 @@ export default function Dashboard() {
     
     return (
       worker.name.toLowerCase().includes(q) ||
+      (worker.englishName && worker.englishName.toLowerCase().includes(q)) ||
+      (worker.code && worker.code.toLowerCase().includes(q)) ||
       (worker.skill && worker.skill.toLowerCase().includes(q)) ||
       (skillLabel && skillLabel.toLowerCase().includes(q)) ||
       (worker.iqamaNumber && worker.iqamaNumber.includes(q)) ||
@@ -877,22 +959,22 @@ export default function Dashboard() {
 
           {/* Global Search - Moved Below */}
           <div className="w-full flex justify-start items-center mt-2 pt-2 md:mt-3 md:pt-3 border-t gap-4 flex-wrap">
-             <div className="relative w-full md:w-[380px]">
-                <Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
+             <div className="relative w-full md:w-[340px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input 
                   type="text"
-                  placeholder="بحث (اسم، مهنة، إقامة، جنسية)..."
-                  className="w-full pr-9 pl-10 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none"
+                  placeholder="بحث سريع (الاسم العربي/الإنجليزي، الكود، رقم الإقامة، المهنة، الجنسية)..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm pl-10 text-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute left-3 top-2.5 text-gray-400 hover:text-red-500 transition-colors"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-gray-200 hover:bg-gray-300 rounded-full p-1 transition-all"
                     title="مسح البحث"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
              </div>
@@ -931,12 +1013,12 @@ export default function Dashboard() {
 
              {/* Notification Bell (Moved Here) */}
              {user?.role === 'admin' && (
-               <div className="relative">
+              <div className="relative">
                  <button 
                     onClick={() => setShowNotifications(!showNotifications)}
-                    className="p-2 rounded-xl hover:bg-gray-100 transition-colors relative border border-gray-200 bg-white shadow-sm self-center"
+                    className="p-2 md:p-2 rounded-xl hover:bg-gray-100 transition-colors relative border border-gray-200 bg-white shadow-sm self-center"
                  >
-                    <Bell className="w-5 h-5 text-gray-600" />
+                    <Bell className="w-6 h-6 md:w-5 md:h-5 text-gray-600" />
                     {unreadCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white animate-pulse">
                         {unreadCount}
@@ -945,7 +1027,9 @@ export default function Dashboard() {
                  </button>
 
                  {showNotifications && (
-                    <div className="absolute top-full left-0 mt-2 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200 origin-top-left ring-1 ring-black/5">
+                    <>
+                    {/* Desktop/Tablet Dropdown */}
+                    <div className="hidden md:block absolute top-full left-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200 origin-top-left ring-1 ring-black/5">
                         <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
                             <h3 className="font-bold text-gray-800 text-sm">الإشعارات</h3>
                             <span className="text-xs text-gray-500">{unreadCount} غير مقروء</span>
@@ -960,10 +1044,10 @@ export default function Dashboard() {
                                     <div 
                                         key={notification.id}
                                         onClick={() => handleNotificationClick(notification)}
-                                        className={`p-4 border-b last:border-0 cursor-pointer hover:bg-gray-50 transition-colors ${!notification.isRead ? 'bg-blue-50/50' : ''}`}
+                                        className={`p-4 border-b last:border-0 cursor-pointer transition-colors ${!notification.isRead ? 'bg-blue-100 hover:bg-blue-50' : 'hover:bg-gray-50'}`}
                                     >
                                         <div className="flex gap-3">
-                                            <div className={`w-2 h-2 mt-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                                            <div className={`w-2 h-2 mt-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-blue-600' : 'bg-gray-300'}`} />
                                             <div>
                                                 <p className={`text-sm ${!notification.isRead ? 'font-bold text-gray-800' : 'text-gray-600'}`}>
                                                     {notification.message}
@@ -978,6 +1062,61 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
+                    
+                    {/* Mobile Bottom Sheet */}
+                    <div 
+                      className="md:hidden fixed inset-0 z-[200]"
+                      onClick={() => setShowNotifications(false)}
+                    >
+                      <div className="absolute inset-0 bg-black/40 animate-in fade-in" />
+                      <div 
+                        className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl ring-1 ring-black/5 animate-in slide-in-from-bottom duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="p-4 border-b flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-gray-900 text-base">الإشعارات</h3>
+                            <span className="text-xs text-gray-500">({unreadCount} غير مقروء)</span>
+                          </div>
+                          <button 
+                            onClick={() => setShowNotifications(false)}
+                            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-bold hover:bg-gray-200"
+                          >
+                            إغلاق
+                          </button>
+                        </div>
+                        <div className="max-h-[70vh] overflow-y-auto divide-y">
+                          {(state.notifications || []).length === 0 ? (
+                            <div className="p-10 text-center text-gray-400 text-sm font-bold">
+                              لا توجد إشعارات حالياً
+                            </div>
+                          ) : (
+                            (state.notifications || []).slice(0, 30).map(notification => (
+                              <button
+                                type="button"
+                                key={notification.id}
+                                onClick={() => {
+                                  handleNotificationClick(notification);
+                                  setShowNotifications(false);
+                                }}
+                                className={`w-full text-right px-4 py-4 flex items-start gap-3 ${!notification.isRead ? 'bg-blue-100' : 'bg-white'} active:bg-gray-50`}
+                              >
+                                <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-blue-600' : 'bg-gray-300'}`} />
+                                <span className="flex-1">
+                                  <span className={`block text-[15px] leading-6 ${!notification.isRead ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                                    {notification.message}
+                                  </span>
+                                  <span className="block text-[11px] text-gray-500 mt-1">
+                                    {new Date(notification.createdAt).toLocaleDateString('ar-EG')} - {new Date(notification.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    </>
                  )}
                </div>
              )}
@@ -1038,6 +1177,7 @@ export default function Dashboard() {
                       })} 
                       skills={state.skills}
                        allWorkers={activeWorkers}
+                       engineer={state.workers.find(w => w.id === site.engineerId)}
                        onDeleteWorker={(user?.role as string) === 'viewer' || (user?.role as string) === 'engineer' ? undefined : handleDeleteWorker}
                        onUpdateWorker={(user?.role as string) === 'viewer' || (user?.role as string) === 'engineer' ? undefined : handleUpdateWorker}
                        sites={scopedState.sites}

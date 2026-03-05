@@ -55,8 +55,24 @@ export function MobileAccess({ onClose }: MobileAccessProps) {
       });
   }, []);
 
+  const getLoginUrl = () => {
+    try {
+      // Ensure we always point to /login for immediate authentication on mobile
+      // Handle cases where 'url' already has a path
+      const base = new URL(url);
+      base.pathname = '/login';
+      base.search = '';
+      base.hash = '';
+      return base.toString();
+    } catch {
+      // Fallback string concat
+      const safe = url.replace(/\/+$/, '');
+      return `${safe}/login`;
+    }
+  };
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(getLoginUrl());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -79,14 +95,14 @@ export function MobileAccess({ onClose }: MobileAccessProps) {
         
         <div className="p-6 flex flex-col items-center space-y-6 overflow-y-auto">
           <div className="bg-white p-4 rounded-xl border-2 border-dashed border-gray-200 shadow-sm relative group">
-            {url && <QRCodeCanvas value={url} size={200} level="H" includeMargin={true} />}
+            {url && <QRCodeCanvas value={getLoginUrl()} size={220} level="H" includeMargin={true} />}
             <div className="absolute inset-0 bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="text-sm font-medium text-gray-600">امسح الكود</span>
             </div>
           </div>
           
           <div className="text-center space-y-2 w-full">
-            <p className="text-sm text-gray-500">امسح الكود بكاميرا الجوال أو أدخل الرابط:</p>
+            <p className="text-sm text-gray-600 font-medium">يمكّنك هذا الكود من فتح صفحة الدخول مباشرة:</p>
             
             <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg border border-gray-200 direction-ltr">
               {isEditing ? (
@@ -105,7 +121,7 @@ export function MobileAccess({ onClose }: MobileAccessProps) {
                   title="انقر لتعديل العنوان"
                 >
                   <code className="font-mono font-medium text-lg text-primary truncate dir-ltr">
-                    {url}
+                    {getLoginUrl()}
                   </code>
                   <Edit2 className="w-3 h-3 text-gray-400 group-hover:text-blue-500" />
                 </div>
