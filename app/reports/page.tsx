@@ -324,8 +324,8 @@ function ReportsContent() {
         stats.iqama.unregistered++;
       } else {
         const d = daysRemaining(w.iqamaExpiry);
-        if (d === 0) stats.iqama.expired++;
-        else if (d && d <= 10) stats.iqama.soon++;
+        if (d !== undefined && d <= 0) stats.iqama.expired++;
+        else if (d !== undefined && d <= 30) stats.iqama.soon++;
         else stats.iqama.valid++;
       }
       // Insurance
@@ -333,8 +333,8 @@ function ReportsContent() {
         stats.insurance.unregistered++;
       } else {
         const d = daysRemaining(w.insuranceExpiry);
-        if (d === 0) stats.insurance.expired++;
-        else if (d && d <= 10) stats.insurance.soon++;
+        if (d !== undefined && d <= 0) stats.insurance.expired++;
+        else if (d !== undefined && d <= 30) stats.insurance.soon++;
         else stats.insurance.valid++;
       }
     });
@@ -2788,9 +2788,24 @@ function ReportsContent() {
                     </div>
                 </div>
                 )}
+                            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 print:hidden flex items-center gap-4">
+                                <div className="relative flex-1 max-w-md">
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <Search className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        placeholder="بحث عن موظف (الاسم، الرقم الوظيفي، الإقامة، الجوال، الجنسية)..." 
+                                        className="block w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        value={workerSearchQuery}
+                                        onChange={(e) => setWorkerSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
                 {filteredWorkers.length === 0 ? (
                     <div className="text-center py-16 text-gray-500">
-                        <p>لا يوجد عمال في النظام</p>
+                        <p>{state.workers.length === 0 ? 'لا يوجد عمال في النظام' : 'لا توجد نتائج للبحث'}</p>
                     </div>
                 ) : (
                     <>
@@ -2830,21 +2845,6 @@ function ReportsContent() {
                                   </div>
                                 </div>
                               </div>
-                            </div>
-
-                            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 print:hidden flex items-center gap-4">
-                                <div className="relative flex-1 max-w-md">
-                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                        <Search className="h-5 w-5 text-gray-400" />
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        placeholder="بحث عن موظف (الاسم، الرقم الوظيفي، الإقامة، الجوال، الجنسية)..." 
-                                        className="block w-full pr-10 pl-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                        value={workerSearchQuery}
-                                        onChange={(e) => setWorkerSearchQuery(e.target.value)}
-                                    />
-                                </div>
                             </div>
 
                             <div className="overflow-x-auto print:hidden max-h-[800px] overflow-y-auto relative">
