@@ -2176,7 +2176,26 @@ function ReportsContent() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
-                            {state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق').map((d, idx) => {
+                            {state.workers
+                                .filter(w => w.skill === 'Driver' || w.skill === 'سائق')
+                                .filter(d => {
+                                    if (!driverSearchStartDate && !driverSearchEndDate) return true;
+                                    
+                                    const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
+                                    if (!vehicle) return false;
+
+                                    const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                    const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                    if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+
+                                    const hasMaintenance = vehicle.maintenanceHistory?.some(m => {
+                                        const mDate = new Date(m.date);
+                                        return mDate >= start && mDate <= end;
+                                    });
+
+                                    return hasMaintenance;
+                                })
+                                .map((d, idx) => {
                                 const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                 let totalTransported = 0;
                                 const sitesDetails = assignedSites.map(s => {
@@ -2186,18 +2205,16 @@ function ReportsContent() {
                                     return { name: s.name, count };
                                 });
 
-                                // Check Maintenance Status
+                                // Get Maintenance Details for display
                                 const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
-                                const hasMaintenance = vehicle?.maintenanceHistory?.some(m => {
-                                    if (!driverSearchStartDate && !driverSearchEndDate) return true; // Show all if no filter
+                                const maintenanceInRange = vehicle?.maintenanceHistory?.filter(m => {
+                                    if (!driverSearchStartDate && !driverSearchEndDate) return true;
                                     const mDate = new Date(m.date);
                                     const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
-                                    // Set end date to end of day
                                     const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
                                     if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
-                                    
                                     return mDate >= start && mDate <= end;
-                                });
+                                }) || [];
 
                                 return (
                                     <tr key={d.id} className={`hover:bg-indigo-50/20 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50 print:bg-gray-50/50'}`}>
@@ -2231,11 +2248,16 @@ function ReportsContent() {
                                             </div>
                                         </td>
                                         <td className="px-5 py-4 text-center print:py-1.5 print:px-2 print:text-xs">
-                                            {hasMaintenance ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 print:bg-white print:border-black print:text-black">
-                                                    <Wrench className="w-3 h-3 print:hidden" />
-                                                    يوجد
-                                                </span>
+                                            {maintenanceInRange.length > 0 ? (
+                                                <div className="flex flex-col gap-1">
+                                                    {maintenanceInRange.map((m, i) => (
+                                                        <span key={i} className="inline-flex flex-col items-start px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-100 print:bg-white print:border-black print:text-black">
+                                                            <span className="font-bold">{m.type}</span>
+                                                            <span className="font-mono text-[10px]">{m.date}</span>
+                                                            {m.cost && <span className="text-[10px]">({m.cost} ريال)</span>}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             ) : (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 print:bg-white print:border-gray-400 print:text-gray-400">
                                                     <X className="w-3 h-3 print:hidden" />
@@ -2249,7 +2271,26 @@ function ReportsContent() {
                         </tbody>
                         <tfoot className="bg-gray-50 font-bold print:bg-white print:table-footer-group">
                             {(() => {
-                                const drivers = state.workers.filter(w => w.skill === 'Driver' || w.skill === 'سائق');
+                                const drivers = state.workers
+                                    .filter(w => w.skill === 'Driver' || w.skill === 'سائق')
+                                    .filter(d => {
+                                        if (!driverSearchStartDate && !driverSearchEndDate) return true;
+                                        
+                                        const vehicle = state.vehicles?.find(v => v.plateNumber === d.driverCarPlate);
+                                        if (!vehicle) return false;
+
+                                        const start = driverSearchStartDate ? new Date(driverSearchStartDate) : new Date(0);
+                                        const end = driverSearchEndDate ? new Date(driverSearchEndDate) : new Date(8640000000000000);
+                                        if (driverSearchEndDate) end.setHours(23, 59, 59, 999);
+
+                                        const hasMaintenance = vehicle.maintenanceHistory?.some(m => {
+                                            const mDate = new Date(m.date);
+                                            return mDate >= start && mDate <= end;
+                                        });
+
+                                        return hasMaintenance;
+                                    });
+
                                 let grandTotalSites = 0;
                                 let grandTotalTransported = 0;
                                 drivers.forEach(d => {

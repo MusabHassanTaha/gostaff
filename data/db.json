@@ -3588,6 +3588,34 @@
   },
   "activityLogs": [
     {
+      "id": "act-1772750190182-800935",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772750190182
+    },
+    {
+      "id": "act-1772750187594-866570",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772750187594
+    },
+    {
+      "id": "act-1772749527272-852643",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772749527272
+    },
+    {
+      "id": "act-1772749526299-340277",
+      "userId": "admin",
+      "action": "login",
+      "route": "/login",
+      "timestamp": 1772749526299
+    },
+    {
       "id": "act-1772747066678-172651",
       "userId": "admin",
       "action": "view",
