@@ -3588,6 +3588,76 @@
   },
   "activityLogs": [
     {
+      "id": "act-1772747066678-172651",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772747066678
+    },
+    {
+      "id": "act-1772747020359-693083",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772747020359
+    },
+    {
+      "id": "act-1772747018553-26209",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772747018553
+    },
+    {
+      "id": "act-1772747004904-876770",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772747004904
+    },
+    {
+      "id": "act-1772747004210-588390",
+      "userId": "admin",
+      "action": "view",
+      "route": "/login",
+      "timestamp": 1772747004210
+    },
+    {
+      "id": "act-1772747004205-606574",
+      "userId": "admin",
+      "action": "login",
+      "route": "/login",
+      "timestamp": 1772747004205
+    },
+    {
+      "id": "act-1772746989086-367344",
+      "userId": "admin",
+      "action": "logout",
+      "route": "/reports",
+      "timestamp": 1772746989086
+    },
+    {
+      "id": "act-1772746980684-547607",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772746980684
+    },
+    {
+      "id": "act-1772746974372-334564",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772746974372
+    },
+    {
+      "id": "act-1772746973087-719983",
+      "userId": "admin",
+      "action": "login",
+      "route": "/login",
+      "timestamp": 1772746973087
+    },
+    {
       "id": "act-1772746245038-523510",
       "userId": "admin",
       "action": "view",
