@@ -3588,6 +3588,41 @@
   },
   "activityLogs": [
     {
+      "id": "act-1772755475419-381478",
+      "userId": "admin",
+      "action": "view",
+      "route": "/vehicles",
+      "timestamp": 1772755475419
+    },
+    {
+      "id": "act-1772755471828-583120",
+      "userId": "admin",
+      "action": "view",
+      "route": "/documents",
+      "timestamp": 1772755471828
+    },
+    {
+      "id": "act-1772755436994-241080",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772755436994
+    },
+    {
+      "id": "act-1772755435277-722335",
+      "userId": "admin",
+      "action": "view",
+      "route": "/projects",
+      "timestamp": 1772755435277
+    },
+    {
+      "id": "act-1772755431831-267709",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772755431831
+    },
+    {
       "id": "act-1772754209120-608262",
       "userId": "admin",
       "action": "view",

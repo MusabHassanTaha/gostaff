@@ -114,7 +114,7 @@ function ReportsContent() {
       // If vehicle filter is active and doesn't match, skip this vehicle entirely
       if (violationSearchVehicle && vehicle.id !== violationSearchVehicle) return;
 
-      vehicle.violations.forEach(violation => {
+      vehicle.violations.forEach((violation: any) => {
         // Driver Filter
         if (violationSearchDriver && violation.driverId !== violationSearchDriver) return;
 
@@ -361,9 +361,9 @@ function ReportsContent() {
       insurance: { valid: 0, soon: 0, expired: 0, unregistered: 0 },
       total: 0
     };
-    const activeWorkers = filteredWorkers.filter(w => w.status !== 'pending');
+    const activeWorkers = filteredWorkers.filter((w: any) => w.status !== 'pending');
     stats.total = activeWorkers.length;
-    activeWorkers.forEach(w => {
+    activeWorkers.forEach((w: any) => {
       // Iqama
       if (!w.iqamaExpiry) {
         stats.iqama.unregistered++;
@@ -387,10 +387,10 @@ function ReportsContent() {
   }, [filteredWorkers]);
 
   const stats = useMemo(() => {
-    const activeWorkers = filteredWorkers.filter(w => w.status !== 'pending');
+    const activeWorkers = filteredWorkers.filter((w: any) => w.status !== 'pending');
     const total = activeWorkers.length;
-    const assigned = activeWorkers.filter(w => w.assignedSiteId).length;
-    const leave = activeWorkers.filter(w => !w.assignedSiteId && w.availabilityStatus === 'rest').length;
+    const assigned = activeWorkers.filter((w: any) => w.assignedSiteId).length;
+    const leave = activeWorkers.filter((w: any) => !w.assignedSiteId && w.availabilityStatus === 'rest').length;
     return { total, assigned, leave };
   }, [filteredWorkers]);
 
@@ -408,7 +408,7 @@ function ReportsContent() {
     let relevantWorkers = (view === 'projects' && reportData?.workers) ? reportData.workers : state.workers.filter(w => w.status !== 'pending');
 
     if (view === 'projects' && !reportData && (projectSearchStartDate || projectSearchEndDate)) {
-        relevantWorkers = relevantWorkers.filter(w => {
+        relevantWorkers = relevantWorkers.filter((w: any) => {
             if (!w.hireDate) return false;
             if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
             if (projectSearchEndDate && w.hireDate > projectSearchEndDate) return false;
@@ -416,7 +416,7 @@ function ReportsContent() {
         });
     }
 
-    const workersInProjects = relevantWorkers.filter(w => w.assignedSiteId && siteIds.has(w.assignedSiteId)).length;
+    const workersInProjects = relevantWorkers.filter((w: any) => w.assignedSiteId && siteIds.has(w.assignedSiteId)).length;
 
     return { totalProjects, activeProjects, stoppedProjects, completedProjects, workersInProjects };
   }, [state.sites, state.workers, view, projectSearchStartDate, projectSearchEndDate, reportData]);
@@ -671,7 +671,7 @@ function ReportsContent() {
       // Use server data if available, otherwise fall back to state
       const sourceVehicles = (view === 'drivers' && reportData?.vehicles) ? reportData.vehicles : state.vehicles;
 
-      const driverRows: any[] = drivers.map(d => {
+      const driverRows: any[] = drivers.map((d: any) => {
          const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
          let totalTransported = 0;
          const sitesDetails = assignedSites.map(s => {
@@ -2318,7 +2318,7 @@ function ReportsContent() {
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
                             {filteredDrivers
-                                .map((d, idx) => {
+                                .map((d: any, idx: number) => {
                                 const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                 let totalTransported = 0;
                                 const sitesDetails = assignedSites.map(s => {
@@ -2430,7 +2430,7 @@ function ReportsContent() {
                                 let grandTotalMaintenance = 0;
                                 let grandTotalViolations = 0;
 
-                                drivers.forEach(d => {
+                                drivers.forEach((d: any) => {
                                     const assignedSites = state.sites.filter(s => s.assignedDrivers?.some((ad: any) => ad.driverId === d.id) || s.driverId === d.id);
                                     grandTotalSites += assignedSites.length;
                                     assignedSites.forEach(s => {
@@ -2939,7 +2939,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">على رأس العمل</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter((w: any) => w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <UserCheck className="w-6 h-6" />
@@ -2948,11 +2948,11 @@ function ReportsContent() {
                          <div className="mt-4 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                             <div 
                                 className="bg-emerald-500 h-1.5 rounded-full transition-all duration-1000 ease-out" 
-                                style={{ width: `${filteredWorkers.length ? (filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100 : 0}%` }}
+                                style={{ width: `${filteredWorkers.length ? (filteredWorkers.filter((w: any) => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100 : 0}%` }}
                             ></div>
                         </div>
                         <div className="mt-1 text-[10px] text-gray-400 text-left font-mono">
-                            {filteredWorkers.length ? Math.round((filteredWorkers.filter(w => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100) : 0}% نسبة التشغيل
+                            {filteredWorkers.length ? Math.round((filteredWorkers.filter((w: any) => w.assignedSiteId && w.availabilityStatus !== 'absent').length / filteredWorkers.length) * 100) : 0}% نسبة التشغيل
                         </div>
                     </div>
 
@@ -2962,7 +2962,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">جاهز للعمل</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => !w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter((w: any) => !w.assignedSiteId && w.availabilityStatus !== 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-xl shadow-lg shadow-amber-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <Coffee className="w-6 h-6" />
@@ -2979,7 +2979,7 @@ function ReportsContent() {
                         <div className="relative z-10 flex items-center justify-between">
                             <div>
                                 <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">غياب / إجازة</p>
-                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter(w => w.availabilityStatus === 'absent').length}</h3>
+                                <h3 className="text-3xl font-black text-gray-800 tracking-tight">{filteredWorkers.filter((w: any) => w.availabilityStatus === 'absent').length}</h3>
                             </div>
                             <div className="w-12 h-12 bg-gradient-to-br from-rose-500 to-rose-600 text-white rounded-xl shadow-lg shadow-rose-200 flex items-center justify-center transform transition-transform group-hover:rotate-6">
                                 <UserX className="w-6 h-6" />
@@ -3075,7 +3075,7 @@ function ReportsContent() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 bg-white">
-                                        {filteredWorkers.map((w, idx) => {
+                                        {filteredWorkers.map((w: any, idx: number) => {
                                             const iqDays = daysRemaining(w.iqamaExpiry);
                                             const insDays = daysRemaining(w.insuranceExpiry);
                                             const skLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
@@ -3139,7 +3139,7 @@ function ReportsContent() {
 
                             {/* Print View Layout (Cards) */}
                             <div className="hidden print:grid grid-cols-2 gap-4 p-1">
-                                {filteredWorkers.map((w, idx) => {
+                                {filteredWorkers.map((w: any, idx: number) => {
                                     const iqDays = daysRemaining(w.iqamaExpiry);
                                     const insDays = daysRemaining(w.insuranceExpiry);
                                     const skLabel = state.skills.find(s => s.name === w.skill)?.label || w.skill;
