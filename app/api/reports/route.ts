@@ -25,12 +25,9 @@ export async function GET(req: Request) {
 
     switch (view) {
       case 'projects':
-        // Filter workers by hire date
-        result.workers = (data.workers || []).filter((w: any) => {
-          if (!startDate && !endDate) return true;
-          const hDate = new Date(w.hireDate);
-          return hDate >= start && hDate <= end;
-        });
+        // Return all workers for project report, ignoring date filter (which was filtering by hireDate incorrectly)
+        // The user wants to see current project status, not just new hires.
+        result.workers = (data.workers || []);
         result.sites = data.sites || [];
         break;
 

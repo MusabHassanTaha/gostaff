@@ -3588,6 +3588,27 @@
   },
   "activityLogs": [
     {
+      "id": "act-1772757010687-152670",
+      "userId": "admin",
+      "action": "view",
+      "route": "/reports",
+      "timestamp": 1772757010687
+    },
+    {
+      "id": "act-1772756590509-849735",
+      "userId": "admin",
+      "action": "view",
+      "route": "/",
+      "timestamp": 1772756590509
+    },
+    {
+      "id": "act-1772756556726-722044",
+      "userId": "admin",
+      "action": "view",
+      "route": "/vehicles",
+      "timestamp": 1772756556726
+    },
+    {
       "id": "act-1772755475419-381478",
       "userId": "admin",
       "action": "view",

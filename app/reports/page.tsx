@@ -329,13 +329,10 @@ function ReportsContent() {
     const allActiveWorkers = [...activeWorkers];
 
     // Apply Date Range Filter for Projects View (Filtering by Hire Date)
+    // Removed filtering by hireDate as it hides current workers when a date range is selected.
+    // The report should show current assignments, and date range should only affect event history (like absence).
     if (view === 'projects' && (projectSearchStartDate || projectSearchEndDate)) {
-        activeWorkers = activeWorkers.filter(w => {
-            if (!w.hireDate) return false;
-            if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
-            if (projectSearchEndDate && w.hireDate > projectSearchEndDate) return false;
-            return true;
-        });
+         // No filtering by hireDate
     }
 
     return state.sites.map(site => {
@@ -407,13 +404,10 @@ function ReportsContent() {
     // Apply Date Range Filter to stats if active
     let relevantWorkers = (view === 'projects' && reportData?.workers) ? reportData.workers : state.workers.filter(w => w.status !== 'pending');
 
-    if (view === 'projects' && !reportData && (projectSearchStartDate || projectSearchEndDate)) {
-        relevantWorkers = relevantWorkers.filter((w: any) => {
-            if (!w.hireDate) return false;
-            if (projectSearchStartDate && w.hireDate < projectSearchStartDate) return false;
-            if (projectSearchEndDate && w.hireDate > projectSearchEndDate) return false;
-            return true;
-        });
+    // Date filter removed for projects view as it was incorrectly filtering by hireDate
+    // The user wants to see current project status regardless of hire date.
+    if (view === 'projects' && !reportData) {
+        // No additional filtering needed for projects view
     }
 
     const workersInProjects = relevantWorkers.filter((w: any) => w.assignedSiteId && siteIds.has(w.assignedSiteId)).length;
@@ -893,9 +887,8 @@ function ReportsContent() {
       const summaryRows = state.sites.map(site => {
         
         let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
-        if (projectSearchEndDate) {
-            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
-        }
+        // Removed hireDate filtering as it hides current workers.
+        // We only want to filter absence history by date range, not worker inclusion.
         
         const workerCount = siteWorkers.length;
         
@@ -1170,7 +1163,7 @@ function ReportsContent() {
                     <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm hover:shadow-md transition-all duration-200">
                         <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
                              <span className="text-xs font-bold text-gray-500 whitespace-nowrap">
-                                {view === 'projects' ? 'تاريخ التعيين من:' : 'من تاريخ:'}
+                                {view === 'projects' ? 'تاريخ:' : 'من تاريخ:'}
                              </span>
                              <input 
                                 type="date" 
@@ -1429,9 +1422,7 @@ function ReportsContent() {
                             {state.sites.map((site, idx) => {
                                 
                                 let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
-                                if (projectSearchEndDate) {
-                                    siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
-                                }
+                                // Removed hireDate filtering to show all current workers regardless of hire date
                                 
                                 const workerCount = siteWorkers.length;
                                 
@@ -1471,18 +1462,15 @@ function ReportsContent() {
                                 <td className="px-2 md:px-5 py-3 md:py-4 text-blue-700 text-base md:text-lg print:text-black print:py-2 print:px-2 print:text-sm">
                                     {state.sites.reduce((acc, site) => {
                                         let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
-                                        if (projectSearchEndDate) {
-                                            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
-                                        }
+                                        // Removed hireDate filtering for total count
                                         return acc + siteWorkers.length;
                                     }, 0)}
                                 </td>
                                 <td className="px-2 md:px-5 py-3 md:py-4 text-red-700 text-base md:text-lg print:text-black print:py-2 print:px-2 print:text-sm">
                                     {state.sites.reduce((acc, site) => {
                                         let siteWorkers = state.workers.filter(w => w.assignedSiteId === site.id && w.status !== 'pending');
-                                        if (projectSearchEndDate) {
-                                            siteWorkers = siteWorkers.filter(w => !w.hireDate || w.hireDate <= projectSearchEndDate);
-                                        }
+                                        // Removed hireDate filtering for absence count aggregation
+                                        
                                         let abs = 0;
                                         siteWorkers.forEach(w => {
                                             if (w.absenceHistory) {
